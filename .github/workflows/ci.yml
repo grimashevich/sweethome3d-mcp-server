@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ── Test ──────────────────────────────────────────────────────────────────
+  test:
+    name: Test (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [ '11', '17' ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Cache SweetHome3D.jar
+        id: cache-sh3d
+        uses: actions/cache@v4
+        with:
+          path: lib/SweetHome3D.jar
+          key: sweethome3d-7.5
+
+      - name: Download SweetHome3D.jar
+        if: steps.cache-sh3d.outputs.cache-hit != 'true'
+        run: |
+          curl -L --retry 3 -o lib/SweetHome3D.jar \
+            "https://unlimited.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5.jar"
+
+      - name: Build and test
+        run: mvn verify --no-transfer-progress
+
+      # Upload coverage only once (JDK 11 run)
+      - name: Upload coverage to Codecov
+        if: matrix.java == '11'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/site/jacoco/jacoco.xml
+          fail_ci_if_error: false
+
+  # ── Release ───────────────────────────────────────────────────────────────
+  release:
+    name: Release
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: temurin
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Cache SweetHome3D.jar
+        id: cache-sh3d
+        uses: actions/cache@v4
+        with:
+          path: lib/SweetHome3D.jar
+          key: sweethome3d-7.5
+
+      - name: Download SweetHome3D.jar
+        if: steps.cache-sh3d.outputs.cache-hit != 'true'
+        run: |
+          curl -L --retry 3 -o lib/SweetHome3D.jar \
+            "https://unlimited.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5.jar"
+
+      - name: Build plugin
+        run: mvn package -DskipTests --no-transfer-progress
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/sh3d-mcp-plugin-*.sh3p
+          generate_release_notes: true

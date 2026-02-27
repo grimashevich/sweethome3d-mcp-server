@@ -1,0 +1,11 @@
+target/
+*.class
+.idea/
+*.iml
+.settings/
+.classpath
+.project
+
+# SweetHome3D.jar is excluded from git (46 MB).
+# Run scripts/setup-dev.sh (or setup-dev.bat) to obtain it before building.
+lib/SweetHome3D.jar

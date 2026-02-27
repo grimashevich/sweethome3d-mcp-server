@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sweethome3d": {
+      "type": "http",
+      "url": "http://localhost:9877/mcp"
+    }
+  }
+}
