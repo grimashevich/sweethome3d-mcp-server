@@ -46,8 +46,11 @@ jobs:
           curl -L --retry 3 -o lib/SweetHome3D.jar \
             "https://unlimited.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5.jar"
 
+      - name: Install Xvfb
+        run: sudo apt-get install -y xvfb
+
       - name: Build and test
-        run: mvn verify --no-transfer-progress
+        run: xvfb-run --auto-servernum mvn verify --no-transfer-progress
 
       # Upload coverage only once (JDK 11 run)
       - name: Upload coverage to Codecov
