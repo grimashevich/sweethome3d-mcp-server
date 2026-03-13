@@ -568,12 +568,28 @@ id=Plugin#SH3DMcp
 name=SH3D MCP Plugin
 class=com.sh3d.mcp.plugin.SH3DMcpPlugin
 description=HTTP MCP server for Model Context Protocol integration
-version=0.1.0
-license=MIT
+version=1.1.0
+license=GPL v2
 provider=SH3D MCP Project
 applicationMinimumVersion=6.0
 javaMinimumVersion=11
 ```
+
+### 5.1.1 Локализация (i18n)
+
+UI плагина локализован на 18 языков через стандартный Java `ResourceBundle`. MCP-команды и их описания остаются на английском (Claude их читает).
+
+**Resource Bundles:**
+
+| Bundle | Расположение | Ключей | Назначение |
+|--------|-------------|--------|-----------|
+| `McpPlugin` | `com/sh3d/mcp/plugin/McpPlugin[_XX].properties` | 42 | Все UI-строки диалога и экшена |
+| `ApplicationPlugin` | `ApplicationPlugin[_XX].properties` | 2 | name + description для Plugin Manager |
+| `McpSettingsAction` | `com/sh3d/mcp/plugin/McpSettingsAction[_XX].properties` | 1 | Name для SH3D PluginAction framework |
+
+**Языки:** en (base), fr, de, es, it, ru, zh_CN, zh_TW, ja, pt, pt_BR, nl, sv, cs, pl, hu, el, bg, vi
+
+**Загрузка:** `McpSettingsAction` загружает `McpPlugin` bundle через `ResourceBundle.getBundle("com.sh3d.mcp.plugin.McpPlugin", Locale.getDefault())` и передаёт в `McpSettingsDialog` через конструктор. Для динамических строк используется `java.text.MessageFormat`.
 
 ### 5.2 EDT -- безопасная модификация модели
 

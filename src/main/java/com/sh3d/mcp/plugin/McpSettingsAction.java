@@ -6,6 +6,8 @@ import com.sh3d.mcp.http.HttpMcpServer;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Locale;
+import java.util.ResourceBundle;
 
 /**
  * Пункт меню "MCP Server..." — открывает диалог настроек MCP-сервера.
@@ -13,13 +15,16 @@ import java.awt.*;
 public class McpSettingsAction extends PluginAction {
 
     private final HttpMcpServer httpServer;
+    private final ResourceBundle bundle;
     private McpSettingsDialog dialog;
 
     public McpSettingsAction(Plugin plugin, HttpMcpServer httpServer) {
         super();
         this.httpServer = httpServer;
+        this.bundle = ResourceBundle.getBundle(
+                "com.sh3d.mcp.plugin.McpPlugin", Locale.getDefault());
         putPropertyValue(Property.MENU, "Tools");
-        putPropertyValue(Property.NAME, "MCP Server\u2026");
+        putPropertyValue(Property.NAME, bundle.getString("action.name"));
         setEnabled(true);
     }
 
@@ -27,7 +32,7 @@ public class McpSettingsAction extends PluginAction {
     public void execute() {
         if (dialog == null) {
             Frame owner = findOwnerFrame();
-            dialog = new McpSettingsDialog(owner, httpServer);
+            dialog = new McpSettingsDialog(owner, httpServer, bundle);
         }
         dialog.setVisible(true);
         dialog.toFront();

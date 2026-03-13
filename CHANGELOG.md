@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-03-13
+
+### Added
+- **Multilingual UI** — plugin settings dialog and menu items are now localized for 18 languages: French, German, Spanish, Italian, Russian, Simplified Chinese, Traditional Chinese, Japanese, Portuguese, Brazilian Portuguese, Dutch, Swedish, Czech, Polish, Hungarian, Greek, Bulgarian, Vietnamese
+- Plugin name and description in SH3D Plugin Manager are also localized
+
+### Changed
+- All UI strings externalized to Java ResourceBundle (`McpPlugin.properties`)
+- `McpSettingsDialog` accepts `ResourceBundle` via constructor (dependency injection)
+- Dynamic strings use `java.text.MessageFormat` for proper placeholder handling
+- Version bumped to 1.1.0
+
 ## [1.0.0] - 2026-02-27
 
 ### Initial public release
@@ -81,5 +93,6 @@ compatible with the MCP protocol version `2025-03-26`.
 **Utility**
 - `batch_commands` — execute multiple commands in a single call
 
-[Unreleased]: https://github.com/grimashevich/sweethome3d-mcp-server/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/grimashevich/sweethome3d-mcp-server/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/grimashevich/sweethome3d-mcp-server/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/grimashevich/sweethome3d-mcp-server/releases/tag/v1.0.0

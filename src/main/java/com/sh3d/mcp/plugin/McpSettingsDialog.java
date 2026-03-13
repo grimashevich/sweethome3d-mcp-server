@@ -20,7 +20,9 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
+import java.text.MessageFormat;
 import java.util.Properties;
+import java.util.ResourceBundle;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -36,6 +38,7 @@ public class McpSettingsDialog extends JDialog {
             "https://api.github.com/repos/grimashevich/sweethome3d-mcp-server/releases/latest";
 
     private final HttpMcpServer httpServer;
+    private final ResourceBundle bundle;
     private final String pluginVersion;
 
     private JLabel statusLabel;
@@ -46,9 +49,10 @@ public class McpSettingsDialog extends JDialog {
     private JTextArea jsonArea;
     private JButton configureButton;
 
-    public McpSettingsDialog(Frame owner, HttpMcpServer httpServer) {
-        super(owner, "MCP Server Settings", false);
+    public McpSettingsDialog(Frame owner, HttpMcpServer httpServer, ResourceBundle bundle) {
+        super(owner, bundle.getString("dialog.title"), false);
         this.httpServer = httpServer;
+        this.bundle = bundle;
         this.pluginVersion = readPluginVersion();
 
         initComponents();
@@ -75,10 +79,10 @@ public class McpSettingsDialog extends JDialog {
         statusLabel = new JLabel();
         statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD));
 
-        versionLabel = new JLabel("Version: " + pluginVersion);
+        versionLabel = new JLabel(MessageFormat.format(bundle.getString("dialog.version.text"), pluginVersion));
         versionLabel.setForeground(Color.GRAY);
 
-        checkUpdatesButton = new JButton("Check for updates");
+        checkUpdatesButton = new JButton(bundle.getString("dialog.button.checkUpdates"));
         checkUpdatesButton.addActionListener(e -> onCheckForUpdates());
 
         portField = new JTextField(String.valueOf(httpServer.getPort()), 8);
@@ -99,8 +103,8 @@ public class McpSettingsDialog extends JDialog {
             @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updateJsonArea(); }
         });
 
-        configureButton = new JButton("Auto-configure Claude Desktop");
-        configureButton.setToolTipText("Write MCP config to Claude Desktop config file (with .bak backup)");
+        configureButton = new JButton(bundle.getString("dialog.button.autoConfigure"));
+        configureButton.setToolTipText(bundle.getString("dialog.button.autoConfigure.tooltip"));
         configureButton.addActionListener(e -> onAutoConfigure());
     }
 
@@ -111,7 +115,7 @@ public class McpSettingsDialog extends JDialog {
         // --- Server panel ---
         JPanel serverPanel = new JPanel(new GridBagLayout());
         serverPanel.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createEtchedBorder(), "Server",
+                BorderFactory.createEtchedBorder(), bundle.getString("dialog.server.border"),
                 TitledBorder.LEFT, TitledBorder.TOP));
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -120,13 +124,13 @@ public class McpSettingsDialog extends JDialog {
 
         // Status row
         gbc.gridx = 0; gbc.gridy = 0;
-        serverPanel.add(new JLabel("Status:"), gbc);
+        serverPanel.add(new JLabel(bundle.getString("dialog.status.label")), gbc);
         gbc.gridx = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
         serverPanel.add(statusLabel, gbc);
 
         // Version row
         gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE;
-        serverPanel.add(new JLabel("Version:"), gbc);
+        serverPanel.add(new JLabel(bundle.getString("dialog.version.label")), gbc);
         gbc.gridx = 1;
         serverPanel.add(versionLabel, gbc);
         gbc.gridx = 2;
@@ -134,7 +138,7 @@ public class McpSettingsDialog extends JDialog {
 
         // Port row
         gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE;
-        serverPanel.add(new JLabel("Port:"), gbc);
+        serverPanel.add(new JLabel(bundle.getString("dialog.port.label")), gbc);
         gbc.gridx = 1;
         serverPanel.add(portField, gbc);
         gbc.gridx = 2;
@@ -145,7 +149,7 @@ public class McpSettingsDialog extends JDialog {
         // --- MCP Configuration panel ---
         JPanel claudePanel = new JPanel(new BorderLayout(0, 6));
         claudePanel.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createEtchedBorder(), "MCP Configuration",
+                BorderFactory.createEtchedBorder(), bundle.getString("dialog.config.border"),
                 TitledBorder.LEFT, TitledBorder.TOP));
 
         JScrollPane scrollPane = new JScrollPane(jsonArea);
@@ -153,7 +157,7 @@ public class McpSettingsDialog extends JDialog {
         claudePanel.add(scrollPane, BorderLayout.CENTER);
 
         JPanel claudeButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        JButton copyButton = new JButton("Copy to Clipboard");
+        JButton copyButton = new JButton(bundle.getString("dialog.button.copyClipboard"));
         copyButton.addActionListener(e -> onCopyJson());
         claudeButtons.add(copyButton);
         claudeButtons.add(configureButton);
@@ -176,11 +180,11 @@ public class McpSettingsDialog extends JDialog {
 
         // --- Bottom panel: GitHub link (left) + Close (right) ---
         JPanel bottomPanel = new JPanel(new BorderLayout());
-        JLabel repoLink = createLinkLabel("GitHub Repository \u2197", REPO_URL);
+        JLabel repoLink = createLinkLabel(bundle.getString("dialog.link.github"), REPO_URL);
         repoLink.setFont(repoLink.getFont().deriveFont(11f));
         bottomPanel.add(repoLink, BorderLayout.WEST);
 
-        JButton closeButton = new JButton("Close");
+        JButton closeButton = new JButton(bundle.getString("dialog.button.close"));
         closeButton.addActionListener(e -> setVisible(false));
         JPanel closeWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         closeWrap.add(closeButton);
@@ -194,33 +198,32 @@ public class McpSettingsDialog extends JDialog {
     private void updateState(ServerState state) {
         switch (state) {
             case RUNNING:
-                statusLabel.setText("\u25CF Running on port " + httpServer.getPort());
+                statusLabel.setText(MessageFormat.format(bundle.getString("dialog.status.running"), httpServer.getPort()));
                 statusLabel.setForeground(new Color(0, 128, 0));
-                toggleButton.setText("Stop");
+                toggleButton.setText(bundle.getString("dialog.button.stop"));
                 toggleButton.setEnabled(true);
                 portField.setEnabled(false);
                 break;
             case STOPPED:
-                statusLabel.setText("\u25CF Stopped");
+                statusLabel.setText(bundle.getString("dialog.status.stopped"));
                 statusLabel.setForeground(Color.GRAY);
-                toggleButton.setText("Start");
+                toggleButton.setText(bundle.getString("dialog.button.start"));
                 toggleButton.setEnabled(true);
                 portField.setEnabled(true);
                 // Показать ошибку при неудачном старте
                 Exception error = httpServer.getLastStartupError();
                 if (error != null) {
-                    showError("Failed to start server on port " + httpServer.getPort()
-                            + ":\n" + error.getMessage());
+                    showError(MessageFormat.format(bundle.getString("dialog.error.startFailed"), httpServer.getPort(), error.getMessage()));
                 }
                 break;
             case STARTING:
-                statusLabel.setText("\u25CF Starting...");
+                statusLabel.setText(bundle.getString("dialog.status.starting"));
                 statusLabel.setForeground(new Color(200, 150, 0));
                 toggleButton.setEnabled(false);
                 portField.setEnabled(false);
                 break;
             case STOPPING:
-                statusLabel.setText("\u25CF Stopping...");
+                statusLabel.setText(bundle.getString("dialog.status.stopping"));
                 statusLabel.setForeground(new Color(200, 150, 0));
                 toggleButton.setEnabled(false);
                 portField.setEnabled(false);
@@ -244,24 +247,22 @@ public class McpSettingsDialog extends JDialog {
 
     private void onCheckForUpdates() {
         checkUpdatesButton.setEnabled(false);
-        checkUpdatesButton.setText("Checking...");
+        checkUpdatesButton.setText(bundle.getString("dialog.button.checking"));
 
         Thread t = new Thread(() -> {
             String latest = fetchLatestVersion();
             SwingUtilities.invokeLater(() -> {
                 checkUpdatesButton.setEnabled(true);
-                checkUpdatesButton.setText("Check for updates");
+                checkUpdatesButton.setText(bundle.getString("dialog.button.checkUpdates"));
 
                 if (latest == null) {
                     JOptionPane.showMessageDialog(this,
-                            "Could not check for updates.\nPlease check your internet connection.",
-                            "Update check failed", JOptionPane.WARNING_MESSAGE);
+                            bundle.getString("dialog.update.failed.message"),
+                            bundle.getString("dialog.update.failed.title"), JOptionPane.WARNING_MESSAGE);
                 } else if (isNewerVersion(latest, pluginVersion)) {
                     int choice = JOptionPane.showConfirmDialog(this,
-                            "Update available: v" + latest
-                                    + "\nCurrent version: v" + pluginVersion
-                                    + "\n\nOpen release page?",
-                            "Update available",
+                            MessageFormat.format(bundle.getString("dialog.update.available.message"), latest, pluginVersion),
+                            bundle.getString("dialog.update.available.title"),
                             JOptionPane.YES_NO_OPTION,
                             JOptionPane.INFORMATION_MESSAGE);
                     if (choice == JOptionPane.YES_OPTION) {
@@ -269,8 +270,8 @@ public class McpSettingsDialog extends JDialog {
                     }
                 } else {
                     JOptionPane.showMessageDialog(this,
-                            "You have the latest version (v" + pluginVersion + ").",
-                            "Up to date", JOptionPane.INFORMATION_MESSAGE);
+                            MessageFormat.format(bundle.getString("dialog.update.upToDate.message"), pluginVersion),
+                            bundle.getString("dialog.update.upToDate.title"), JOptionPane.INFORMATION_MESSAGE);
                 }
             });
         }, "mcp-update-check");
@@ -352,12 +353,12 @@ public class McpSettingsDialog extends JDialog {
         try {
             int port = Integer.parseInt(text);
             if (port < 1 || port > 65535) {
-                showError("Port must be between 1 and 65535.");
+                showError(bundle.getString("dialog.error.portRange"));
                 return -1;
             }
             return port;
         } catch (NumberFormatException e) {
-            showError("Invalid port number: " + text);
+            showError(MessageFormat.format(bundle.getString("dialog.error.portInvalid"), text));
             return -1;
         }
     }
@@ -381,17 +382,15 @@ public class McpSettingsDialog extends JDialog {
         String json = jsonArea.getText();
         Toolkit.getDefaultToolkit().getSystemClipboard()
                 .setContents(new StringSelection(json), null);
-        JOptionPane.showMessageDialog(this, "JSON copied to clipboard.",
-                "Copied", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(this, bundle.getString("dialog.clipboard.message"),
+                bundle.getString("dialog.clipboard.title"), JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void onAutoConfigure() {
         int port = getDisplayPort();
         int choice = JOptionPane.showConfirmDialog(this,
-                "This will merge the MCP server config into Claude Desktop's\n"
-                        + "configuration file. A .bak backup will be created.\n\n"
-                        + "Proceed?",
-                "Auto-configure Claude Desktop",
+                bundle.getString("dialog.configure.confirm.message"),
+                bundle.getString("dialog.configure.confirm.title"),
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
 
         if (choice != JOptionPane.OK_OPTION) return;
@@ -400,27 +399,26 @@ public class McpSettingsDialog extends JDialog {
             ClaudeDesktopConfigurator.ConfigureResult result =
                     ClaudeDesktopConfigurator.configure(port);
             String msg = result.isCreated()
-                    ? "Configuration file created:\n" + result.getConfigPath()
-                    : "Configuration updated:\n" + result.getConfigPath()
-                    + "\nBackup: " + result.getBackupPath();
+                    ? MessageFormat.format(bundle.getString("dialog.configure.created.message"), result.getConfigPath())
+                    : MessageFormat.format(bundle.getString("dialog.configure.updated.message"), result.getConfigPath(), result.getBackupPath());
             JOptionPane.showMessageDialog(this, msg,
-                    "Success", JOptionPane.INFORMATION_MESSAGE);
+                    bundle.getString("dialog.configure.success.title"), JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException ex) {
             LOG.log(Level.WARNING, "Auto-configure failed", ex);
-            showError("Failed to configure Claude Desktop:\n" + ex.getMessage());
+            showError(MessageFormat.format(bundle.getString("dialog.configure.error"), ex.getMessage()));
         }
     }
 
     private void showError(String message) {
         JOptionPane.showMessageDialog(this, message,
-                "Error", JOptionPane.ERROR_MESSAGE);
+                bundle.getString("dialog.error.title"), JOptionPane.ERROR_MESSAGE);
     }
 
     private void installContextMenu(JTextArea area) {
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem copyItem = new JMenuItem("Copy");
+        JMenuItem copyItem = new JMenuItem(bundle.getString("dialog.context.copy"));
         copyItem.addActionListener(e -> area.copy());
-        JMenuItem selectAllItem = new JMenuItem("Select All");
+        JMenuItem selectAllItem = new JMenuItem(bundle.getString("dialog.context.selectAll"));
         selectAllItem.addActionListener(e -> area.selectAll());
         menu.add(copyItem);
         menu.addSeparator();
