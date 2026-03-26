@@ -17,7 +17,9 @@ Claude Desktop / Claude Code
 └─────────────────────────────────────┘
 ```
 
-## Screenshot
+## Screenshots
+
+![3D scene created via MCP](docs/demo.jpg)
 
 ![MCP Server Settings dialog](docs/screenshot.jpg)
 
