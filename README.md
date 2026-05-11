@@ -4,16 +4,16 @@
 [![Java 11+](https://img.shields.io/badge/Java-11%2B-orange.svg)](https://adoptium.net/)
 [![Sweet Home 3D 6.0+](https://img.shields.io/badge/Sweet_Home_3D-6.0%2B-green.svg)](https://www.sweethome3d.com/)
 
-A plugin for [Sweet Home 3D](https://www.sweethome3d.com/) that embeds an MCP (Model Context Protocol) server directly inside the application. Lets Claude and other AI assistants control Sweet Home 3D over HTTP — create walls, place furniture, render photos, and more — without any external proxy or separate server process.
+A plugin for [Sweet Home 3D](https://www.sweethome3d.com/) that embeds an MCP (Model Context Protocol) server directly inside the application. It exposes a v2 Streamable HTTP MCP endpoint at `/mcp` and a legacy SSE-style endpoint at `/sse`, so modern HTTP MCP clients and older integrations can both control Sweet Home 3D without any external proxy or separate server process.
 
 ```
-Claude Desktop / Claude Code
+MCP client / HTTP bridge
          │  HTTP (JSON-RPC 2.0)
          ▼
 ┌─────────────────────────────────────┐
 │  Sweet Home 3D  +  MCP Plugin       │
 │  Built-in HTTP server on port 9877  │
-│  http://127.0.0.1:9877/mcp         │
+│  http://127.0.0.1:9877/mcp            │
 └─────────────────────────────────────┘
 ```
 
@@ -46,9 +46,16 @@ Claude Desktop / Claude Code
 
 **Step 3.** (Re)start Sweet Home 3D. The MCP server starts automatically on port `9877`.
 
-> You can verify it is running: **Tools → MCP Server...** shows the server status.
+> You can verify it is running: **Tools → MCP Server...** shows the server status and both endpoint URLs.
 
-## Claude Configuration
+## Endpoints
+
+| Endpoint | URL | Use for |
+|----------|-----|---------|
+| MCP / Streamable HTTP | `http://localhost:9877/mcp` | Recommended for MCP clients that support `"type": "http"` |
+| SSE | `http://localhost:9877/sse` | Legacy endpoint for older integrations targeting the previous transport |
+
+## Client Configuration
 
 Add to your Claude Desktop `claude_desktop_config.json`:
 
@@ -56,14 +63,18 @@ Add to your Claude Desktop `claude_desktop_config.json`:
 {
   "mcpServers": {
     "sweethome3d": {
-      "type": "http",
-      "url": "http://localhost:9877/mcp"
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:9877/mcp"
+      ]
     }
   }
 }
 ```
 
-For Claude Code, create `.mcp.json` in your project directory:
+For Claude Code and other HTTP-capable MCP clients, create `.mcp.json` in your project directory:
 
 ```json
 {
@@ -76,7 +87,7 @@ For Claude Code, create `.mcp.json` in your project directory:
 }
 ```
 
-> The plugin also has a built-in **"Auto-configure Claude Desktop"** button in **Tools → MCP Server...** that writes this config automatically.
+> The settings dialog shows both endpoint URLs, provides copy-ready snippets for MCP / Streamable HTTP and Claude Desktop, and the built-in **"Auto-configure Claude Desktop"** button writes the `mcp-remote` bridge config automatically.
 
 ## Available Commands
 
@@ -233,7 +244,7 @@ cd sweethome3d-mcp-server
 The plugin is a single self-contained component with no external runtime dependencies:
 
 - **`plugin`** — Entry point (`SH3DMcpPlugin`), settings dialog
-- **`http`** — Streamable HTTP MCP server (JSON-RPC 2.0, port 9877)
+- **`http`** — v2 Streamable HTTP MCP endpoint plus legacy SSE-style endpoint (JSON-RPC 2.0, port 9877)
 - **`command`** — 42 command handlers, auto-registered via `CommandRegistry`
 - **`bridge`** — Thread-safe Sweet Home 3D API wrapper (`HomeAccessor` via EDT, `CheckpointManager`, `ObjectResolver`)
 - **`protocol`** — Hand-written JSON parser (zero external dependencies)

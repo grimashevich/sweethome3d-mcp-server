@@ -32,6 +32,13 @@ class ClaudeDesktopConfiguratorTest {
     }
 
     @Test
+    void testGenerateStreamableHttpJsonDefaultPort() {
+        String json = ClaudeDesktopConfigurator.generateStreamableHttpJson(9877);
+        assertTrue(json.contains("\"type\": \"http\""));
+        assertTrue(json.contains("http://localhost:9877/mcp"));
+    }
+
+    @Test
     void testGenerateMcpJsonIsParseable() {
         String json = ClaudeDesktopConfigurator.generateMcpJson(9877);
         @SuppressWarnings("unchecked")

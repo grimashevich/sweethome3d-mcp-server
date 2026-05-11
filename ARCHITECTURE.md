@@ -20,10 +20,10 @@
 ### 1.1 Контекстная диаграмма
 
 ```
-+------------------+     HTTP (Streamable HTTP)      +----------------------------+
-|                  |     JSON-RPC 2.0                |                            |
-|  Claude (LLM)   | -------- POST /mcp -----------> |  SH3D MCP Plugin           |
-|                  |     http://127.0.0.1:9877/mcp   |  (внутри Sweet Home 3D JVM)|
++------------------+     HTTP (Streamable HTTP)                +----------------------------+
+|                  |     JSON-RPC 2.0                          |                            |
+|  Claude (LLM)   | --- POST /mcp --------------------------> |  SH3D MCP Plugin           |
+|                  |     http://127.0.0.1:9877/mcp            |  (внутри Sweet Home 3D JVM)|
 +------------------+                                 +----------------------------+
                                                               |
                                                       +-------v-----------+
@@ -35,7 +35,7 @@
 ```
 
 Плагин реализует MCP (Model Context Protocol) версии `2025-03-26` напрямую через Streamable HTTP.
-Внешний MCP-сервер-прокси не требуется — Claude подключается к HTTP endpoint `/mcp` в плагине.
+Основной MCP endpoint — `/mcp`, а legacy SSE-style endpoint доступен отдельно на `/sse`.
 
 ### 1.2 Диаграмма компонентов плагина
 
@@ -46,7 +46,7 @@
 |  +---------------------+     +------------------------------------------+  |
 |  |   Plugin Lifecycle  |     |          HTTP MCP Server Layer            |  |
 |  |                     |     |                                          |  |
-|  |  SH3DMcpPlugin      |---->|  HttpMcpServer      McpRequestHandler   |  |
+|  |  SH3DMcpPlugin      |---->|  HttpMcpServer      MCP Handlers        |  |
 |  |  (extends Plugin)   |     |  (HttpServer)        (JSON-RPC 2.0)     |  |
 |  |                     |     |                                          |  |
 |  |  McpSettingsAction  |     |  SessionManager      JsonRpcProtocol    |  |
@@ -84,9 +84,9 @@
 ### 1.4 Потоки данных
 
 ```
-Claude (HTTP клиент)          Плагин
-    |                          |
-    |--- POST /mcp ---------->|  1. McpRequestHandler.handle()
+Claude (HTTP клиент)              Плагин
+    |                              |
+    |--- POST /mcp ------------->|  1. HttpStreamableMcpRequestHandler.handle()
     |   JSON-RPC 2.0          |  2. JsonRpcProtocol.parseRequest(body)
     |   method: tools/call     |  3. resolveAction(toolName) → action
     |                          |  4. CommandRegistry.dispatch(request, accessor)
@@ -110,11 +110,14 @@ com.sh3d.mcp/
 |-- plugin/                         # Точка входа плагина и SH3D-интеграция
 |   |-- SH3DMcpPlugin.java         # extends Plugin, точка входа
 |   |-- McpSettingsAction.java      # PluginAction — открывает McpSettingsDialog (настройки MCP-сервера)
-|   |-- McpSettingsDialog.java     # Swing-диалог настроек: статус, порт, autoStart, Claude Desktop конфиг
+|   |-- McpSettingsDialog.java     # Swing-диалог: статус, порт, endpoint'ы, config snippets
 |
 |-- http/                           # HTTP MCP-сервер (Streamable HTTP)
 |   |-- HttpMcpServer.java         # com.sun.net.httpserver.HttpServer, lifecycle
-|   |-- McpRequestHandler.java     # HttpHandler для /mcp endpoint
+|   |-- SseMcpRequestHandler.java  # HttpHandler для legacy SSE-style /sse endpoint
+|   |-- HttpStreamableMcpRequestHandler.java # HttpHandler для строгого /mcp
+|   |-- McpEndpointUrls.java       # Public URL/path helpers for UI and config
+|   |-- McpHttpUtil.java           # Shared HTTP utility methods for handlers
 |   |-- JsonRpcProtocol.java       # JSON-RPC 2.0 парсинг/форматирование
 |   |-- McpSession.java            # Value object MCP-сессии
 |   |-- SessionManager.java        # Управление сессиями (ConcurrentHashMap, TTL)
@@ -181,11 +184,12 @@ com.sh3d.mcp/
 **`McpSettingsAction extends PluginAction`**
 - Пункт меню "MCP Server..." (в меню Tools)
 - `execute()` -- открывает `McpSettingsDialog` (модальный Swing-диалог настроек)
-- Диалог показывает статус сервера, порт, позволяет start/stop и автоконфигурацию Claude Desktop
+- Диалог показывает статус сервера, порт, оба endpoint URL и позволяет start/stop
+- Отображает отдельные config snippets для Streamable HTTP и Claude Desktop
 
 **`McpSettingsDialog extends JDialog`**
 - Swing-диалог настроек MCP-сервера
-- Показывает текущий статус (RUNNING/STOPPED), порт, autoStart
+- Показывает текущий статус (RUNNING/STOPPED), порт и оба endpoint URL
 - Кнопки Start/Stop для управления сервером
 - Интеграция с `ClaudeDesktopConfigurator` для автоконфигурации Claude Desktop
 
@@ -195,13 +199,18 @@ com.sh3d.mcp/
 - Управляет `com.sun.net.httpserver.HttpServer` на `127.0.0.1:port`
 - `ThreadPoolExecutor` (core=4, max=16, `SynchronousQueue`) с daemon-потоками для обработки запросов
 - Жизненный цикл: STOPPED → STARTING → RUNNING → STOPPING → STOPPED
-- Один endpoint: `/mcp`
+- Endpoint'ы: основной `/mcp`, legacy SSE-style `/sse`, плюс `/health`
 
-**`McpRequestHandler implements HttpHandler`**
-- Обрабатывает POST (JSON-RPC 2.0), GET (SSE -- не реализовано), DELETE (cleanup)
+**`SseMcpRequestHandler implements HttpHandler`**
+- Обрабатывает legacy SSE-style `/sse` endpoint со старым поведением сессий
 - DNS rebinding protection через валидацию Origin заголовка
 - `tools/list` -- собирает tools из `CommandDescriptor` через `CommandRegistry`
 - `tools/call` -- диспетчеризация через `CommandRegistry.dispatch()`
+
+**`HttpStreamableMcpRequestHandler implements HttpHandler`**
+- Обрабатывает строгий Streamable HTTP endpoint `/mcp`
+- Поддерживает single request и JSON-RPC batch, возвращает 404 для неизвестных/истёкших сессий
+- `GET` возвращает 405 (SSE-поток пока не реализован), `DELETE` завершает сессию
 
 **`JsonRpcProtocol`**
 - Статические методы для парсинга JSON-RPC 2.0 запросов и форматирования ответов
@@ -264,7 +273,7 @@ void onStateChanged(ServerState oldState, ServerState newState);
 **`CommandException`**
 - Unchecked exception (`RuntimeException`) для ошибок, возникающих при выполнении задач в EDT
 - Бросается из `HomeAccessor.runOnEDT()` при ошибках в callable
-- Перехватывается на уровне `McpRequestHandler` и трансформируется в JSON-RPC error response
+- Перехватывается на уровне HTTP MCP handler'ов и трансформируется в JSON-RPC error response
 
 **`PathValidator`**
 - Валидация и нормализация файловых путей
@@ -296,7 +305,7 @@ void onStateChanged(ServerState oldState, ServerState newState);
 |           v                                                 |    |
 |  +------------------+                                       |    |
 |  | pool-thread-N    |  daemon=true                          |    |
-|  | (McpRequestHandler)  parse -> dispatch -> execute -------+    |
+|  | (HTTP MCP handler) parse -> dispatch -> execute --------+    |
 |  +------------------+   <- format <- respond                     |
 |                                                                  |
 +------------------------------------------------------------------+
@@ -322,7 +331,8 @@ void onStateChanged(ServerState oldState, ServerState newState);
                      |  state = STARTING
                      |  new ThreadPoolExecutor(4, 16, 60s, SynchronousQueue, daemon)
                      |  HttpServer.create(127.0.0.1:port, 0)
-                     |  createContext("/mcp", McpRequestHandler)
+                     |  createContext("/sse", SseMcpRequestHandler)
+                     |  createContext("/mcp", HttpStreamableMcpRequestHandler)
                      |  HttpServer.start()
                      |  state = RUNNING
                      |
@@ -346,16 +356,17 @@ void onStateChanged(ServerState oldState, ServerState newState);
 #### Транспортный уровень
 - **Транспорт:** HTTP (com.sun.net.httpserver.HttpServer, встроен в JDK)
 - **Bind:** `127.0.0.1:9877` (только localhost)
-- **Endpoint:** `/mcp`
+- **Основной endpoint:** `/mcp`
+- **Legacy endpoint:** `/sse`
 - **Протокол:** JSON-RPC 2.0 поверх HTTP (MCP Streamable HTTP spec `2025-03-26`)
 
 #### HTTP-методы
 
 | Метод | Назначение | Статус |
 |-------|-----------|--------|
-| **POST** | JSON-RPC 2.0 запросы (initialize, tools/list, tools/call, ping) | Реализовано |
-| **GET** | SSE-поток для server→client уведомлений | 405 (не реализовано) |
-| **DELETE** | Завершение MCP-сессии | Реализовано |
+| **POST** | JSON-RPC 2.0 запросы на `/mcp` | Реализовано |
+| **GET** | SSE-поток на `/mcp` | 405 (не реализовано) |
+| **DELETE** | Завершение MCP-сессии на `/mcp` | Реализовано |
 
 #### MCP-методы (POST /mcp)
 
@@ -386,6 +397,7 @@ void onStateChanged(ServerState oldState, ServerState newState);
 - `initialize` создаёт сессию, возвращает `Mcp-Session-Id` в HTTP header
 - `tools/list` и `tools/call` требуют валидный `Mcp-Session-Id` header
 - `DELETE /mcp` удаляет сессию
+- Legacy `/sse` endpoint оставлен для существующих клиентов и сохраняет более lenient session semantics
 - TTL сессий: 30 минут, lazy cleanup
 
 #### Безопасность
@@ -499,12 +511,12 @@ registry.register("my_new_command", new MyNewHandler());
 
 Каждый `CommandHandler` отвечает за валидацию своих параметров. При ошибке
 обработчик возвращает `Response.error(...)`. Исключения перехватываются на
-уровне `McpRequestHandler`.
+уровне HTTP MCP handler'ов.
 
 **Трёхуровневая обработка ошибок:**
 
 ```
-Уровень 1: HTTP/JSON-RPC Layer (McpRequestHandler + JsonRpcProtocol)
+Уровень 1: HTTP/JSON-RPC Layer (HTTP MCP handlers + JsonRpcProtocol)
    - Невалидный JSON (PARSE_ERROR -32700)
    - Отсутствие поля "method" (INVALID_REQUEST -32600)
    - Неизвестный MCP-метод (METHOD_NOT_FOUND -32601)
@@ -728,7 +740,7 @@ logLevel=INFO
 - Мержит секцию `mcpServers.sweethome3d` в `claude_desktop_config.json`
 - Кросс-платформенный поиск конфига (Windows: `%APPDATA%\Claude\`, macOS: `~/Library/Application Support/Claude/`, Linux: `~/.config/Claude/`)
 - Создаёт `.bak` бэкап перед модификацией существующего конфига
-- Claude Desktop не поддерживает `"type": "http"` — используется `npx mcp-remote` как stdio-мост к HTTP endpoint плагина
+- Claude Desktop не поддерживает `"type": "http"` — используется `npx mcp-remote` как stdio-мост к `/mcp`
 - Вызывается из `McpSettingsDialog` по нажатию кнопки
 
 ### 7.4 Логирование
@@ -756,7 +768,7 @@ sh3d-mcp-plugin/
 |   |-- main/
 |   |   |-- java/com/sh3d/mcp/
 |   |   |   |-- plugin/          # SH3DMcpPlugin, McpSettingsAction, McpSettingsDialog
-|   |   |   |-- http/            # HttpMcpServer, McpRequestHandler, JsonRpcProtocol, ...
+|   |   |   |-- http/            # HttpMcpServer, SseMcpRequestHandler, HttpStreamableMcpRequestHandler, ...
 |   |   |   |-- server/          # ServerState, ServerStateListener
 |   |   |   |-- protocol/        # JsonUtil, Request, Response
 |   |   |   |-- command/         # CommandHandler, CommandRegistry, 42 handlers, утилиты, shape generators
@@ -823,9 +835,9 @@ cp target/sh3d-mcp-plugin-0.1.0-SNAPSHOT.sh3p "$APPDATA/eTeks/Sweet Home 3D/plug
 ### 9.1 MCP Handshake: initialize → tools/list
 
 ```
-Claude                    McpRequestHandler     SessionManager    CommandRegistry
+Claude                HttpStreamableMcpRequestHandler SessionManager CommandRegistry
   |                            |                     |                |
-  |-- POST /mcp ------------->|                     |                |
+  |-- POST /mcp ----------->|                     |                |
   |   method: initialize       |                     |                |
   |                            |-- createSession --->|                |
   |                            |<- McpSession -------|                |
@@ -834,7 +846,7 @@ Claude                    McpRequestHandler     SessionManager    CommandRegistr
   |   result: {capabilities,   |                     |                |
   |    serverInfo, version}    |                     |                |
   |                            |                     |                |
-  |-- POST /mcp ------------->|                     |                |
+  |-- POST /mcp ----------->|                     |                |
   |   method: tools/list       |                     |                |
   |   Mcp-Session-Id: ...      |                     |                |
   |                            |-- validateSession ->|                |
@@ -854,9 +866,9 @@ Claude                    McpRequestHandler     SessionManager    CommandRegistr
 ### 9.2 Успешный tools/call: get_state
 
 ```
-Claude                    McpRequestHandler    CommandRegistry    GetStateHandler    HomeAccessor    EDT
+Claude               HttpStreamableMcpRequestHandler CommandRegistry GetStateHandler HomeAccessor EDT
   |                            |                    |                  |                 |            |
-  |-- POST /mcp ------------->|                    |                  |                 |            |
+  |-- POST /mcp ----------->|                    |                  |                 |            |
   |   method: tools/call       |                    |                  |                 |            |
   |   params: {name:           |                    |                  |                 |            |
   |    "get_state"}            |                    |                  |                 |            |
@@ -887,9 +899,9 @@ Claude                    McpRequestHandler    CommandRegistry    GetStateHandle
 ### 9.3 Сценарий с ошибкой: неизвестный tool
 
 ```
-Claude                    McpRequestHandler
+Claude                    HttpStreamableMcpRequestHandler
   |                            |
-  |-- POST /mcp ------------->|
+  |-- POST /mcp ----------->|
   |   method: tools/call       |
   |   params: {name: "xyz"}    |
   |                            |
@@ -905,9 +917,9 @@ Claude                    McpRequestHandler
 ### 9.4 Сценарий: невалидный JSON
 
 ```
-Claude                    McpRequestHandler    JsonRpcProtocol
+Claude               HttpStreamableMcpRequestHandler JsonRpcProtocol
   |                            |                    |
-  |-- POST /mcp ------------->|                    |
+  |-- POST /mcp ----------->|                    |
   |   body: "not json"        |                    |
   |                            |-- parseRequest --->|
   |                            |   IllegalArgument  |

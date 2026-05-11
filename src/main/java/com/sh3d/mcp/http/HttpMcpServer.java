@@ -27,15 +27,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * HTTP-сервер, реализующий MCP (Model Context Protocol) через Streamable HTTP.
- * Один endpoint /mcp принимает POST (JSON-RPC 2.0), GET (SSE), DELETE (session cleanup).
+ * HTTP-сервер, реализующий MCP (Model Context Protocol) через два HTTP endpoint'а:
+ * legacy SSE-style endpoint и v2 Streamable HTTP endpoint.
  * Использует встроенный com.sun.net.httpserver.HttpServer — ноль внешних зависимостей.
  */
 public class HttpMcpServer {
 
     private static final Logger LOG = Logger.getLogger(HttpMcpServer.class.getName());
-    private static final String MCP_ENDPOINT = "/mcp";
-    private static final String HEALTH_ENDPOINT = "/health";
 
     static final int CORE_POOL_SIZE = 4;
     static final int MAX_POOL_SIZE = 16;
@@ -47,15 +45,19 @@ public class HttpMcpServer {
     private volatile ExecutorService executor;
     private volatile Exception lastStartupError;
 
-    /** Current request handler; replaced atomically by {@link #switchContext}. */
-    private volatile McpRequestHandler currentHandler;
+    /** Current SSE-style request handler; replaced atomically by {@link #switchContext}. */
+    private volatile SseMcpRequestHandler currentSseHandler;
+
+    /** Current v2 Streamable HTTP handler; replaced atomically by {@link #switchContext}. */
+    private volatile HttpStreamableMcpRequestHandler currentMcpHandler;
 
     private final AtomicReference<ServerState> state = new AtomicReference<>(ServerState.STOPPED);
     private final List<ServerStateListener> stateListeners = new CopyOnWriteArrayList<>();
 
     public HttpMcpServer(PluginConfig config, CommandRegistry commandRegistry, HomeAccessor accessor) {
         this.port = config.getPort();
-        this.currentHandler = new McpRequestHandler(commandRegistry, accessor);
+        this.currentSseHandler = new SseMcpRequestHandler(commandRegistry, accessor);
+        this.currentMcpHandler = new HttpStreamableMcpRequestHandler(commandRegistry, accessor);
     }
 
     /**
@@ -71,7 +73,8 @@ public class HttpMcpServer {
         if (newAccessor == null) {
             throw new IllegalArgumentException("HomeAccessor must not be null");
         }
-        this.currentHandler = new McpRequestHandler(newRegistry, newAccessor);
+        this.currentSseHandler = new SseMcpRequestHandler(newRegistry, newAccessor);
+        this.currentMcpHandler = new HttpStreamableMcpRequestHandler(newRegistry, newAccessor);
         LOG.info("MCP server context switched to new Home");
     }
 
@@ -138,6 +141,14 @@ public class HttpMcpServer {
         return port;
     }
 
+    public String getSseEndpointUrl() {
+        return McpEndpointUrls.sseLocalhostUrl(port);
+    }
+
+    public String getMcpEndpointUrl() {
+        return McpEndpointUrls.mcpLocalhostUrl(port);
+    }
+
     public Exception getLastStartupError() {
         return lastStartupError;
     }
@@ -187,8 +198,10 @@ public class HttpMcpServer {
             localServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
             localServer.setExecutor(localExecutor);
 
-            localServer.createContext(MCP_ENDPOINT, new DelegatingMcpHandler());
-            localServer.createContext(HEALTH_ENDPOINT, new HealthHandler());
+            localServer.createContext(McpHttpUtil.SSE_ENDPOINT, new SseDelegatingMcpHandler());
+            localServer.createContext(McpHttpUtil.MCP_ENDPOINT,
+                    new McpDelegatingHandler());
+            localServer.createContext(McpHttpUtil.HEALTH_ENDPOINT, new HealthHandler());
 
             localServer.start();
 
@@ -203,7 +216,11 @@ public class HttpMcpServer {
             this.executor = localExecutor;
             this.httpServer = localServer;
 
-            LOG.info("MCP HTTP server started on http://127.0.0.1:" + port + MCP_ENDPOINT);
+            LOG.info("MCP HTTP server started on "
+                    + McpEndpointUrls.loopbackUrl(port, McpHttpUtil.MCP_ENDPOINT)
+                    + " (v2 streamable) and "
+                    + McpEndpointUrls.loopbackUrl(port, McpHttpUtil.SSE_ENDPOINT)
+                    + " (legacy SSE-style)");
 
         } catch (IOException e) {
             lastStartupError = e;
@@ -245,14 +262,21 @@ public class HttpMcpServer {
     }
 
     /**
-     * Delegates every request to the current {@link #currentHandler}.
+     * Delegates legacy SSE-style requests to the current SSE handler.
      * This indirection allows hot-swapping the handler via {@link #switchContext}
      * without restarting the HTTP server.
      */
-    private class DelegatingMcpHandler implements HttpHandler {
+    private class SseDelegatingMcpHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            currentHandler.handle(exchange);
+            currentSseHandler.handle(exchange);
+        }
+    }
+
+    private class McpDelegatingHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            currentMcpHandler.handle(exchange);
         }
     }
 

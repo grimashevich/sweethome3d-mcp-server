@@ -2,10 +2,12 @@ package com.sh3d.mcp.plugin;
 
 import com.sh3d.mcp.config.ClaudeDesktopConfigurator;
 import com.sh3d.mcp.http.HttpMcpServer;
+import com.sh3d.mcp.http.McpEndpointUrls;
 import com.sh3d.mcp.server.ServerState;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
+import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
@@ -45,8 +47,12 @@ public class McpSettingsDialog extends JDialog {
     private JLabel versionLabel;
     private JButton checkUpdatesButton;
     private JTextField portField;
+    private JTextField sseEndpointField;
+    private JTextField mcpEndpointField;
     private JButton toggleButton;
-    private JTextArea jsonArea;
+    private JTabbedPane configTabs;
+    private JTextArea mcpJsonArea;
+    private JTextArea claudeJsonArea;
     private JButton configureButton;
 
     public McpSettingsDialog(Frame owner, HttpMcpServer httpServer, ResourceBundle bundle) {
@@ -86,21 +92,24 @@ public class McpSettingsDialog extends JDialog {
         checkUpdatesButton.addActionListener(e -> onCheckForUpdates());
 
         portField = new JTextField(String.valueOf(httpServer.getPort()), 8);
+        sseEndpointField = createReadOnlyField();
+        mcpEndpointField = createReadOnlyField();
 
         toggleButton = new JButton();
         toggleButton.addActionListener(e -> onToggle());
 
-        jsonArea = new JTextArea(8, 42);
-        jsonArea.setEditable(false);
-        jsonArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        updateJsonArea();
-        installContextMenu(jsonArea);
+        mcpJsonArea = createConfigArea();
+        claudeJsonArea = createConfigArea();
+        configTabs = new JTabbedPane();
+        configTabs.addTab(bundle.getString("dialog.config.tab.mcp"), wrapConfigArea(mcpJsonArea));
+        configTabs.addTab(bundle.getString("dialog.config.tab.claude"), wrapConfigArea(claudeJsonArea));
+        updateConfigViews();
 
-        // Обновлять JSON при изменении порта
+        // Обновлять URL и config snippets при изменении порта
         portField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updateJsonArea(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updateJsonArea(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updateJsonArea(); }
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updateConfigViews(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updateConfigViews(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updateConfigViews(); }
         });
 
         configureButton = new JButton(bundle.getString("dialog.button.autoConfigure"));
@@ -144,6 +153,18 @@ public class McpSettingsDialog extends JDialog {
         gbc.gridx = 2;
         serverPanel.add(toggleButton, gbc);
 
+        // Compatibility endpoint row
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE;
+        serverPanel.add(new JLabel(bundle.getString("dialog.endpoint.sse.label")), gbc);
+        gbc.gridx = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
+        serverPanel.add(sseEndpointField, gbc);
+
+        // MCP endpoint row
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE;
+        serverPanel.add(new JLabel(bundle.getString("dialog.endpoint.mcp.label")), gbc);
+        gbc.gridx = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
+        serverPanel.add(mcpEndpointField, gbc);
+
         content.add(serverPanel, BorderLayout.NORTH);
 
         // --- MCP Configuration panel ---
@@ -152,13 +173,11 @@ public class McpSettingsDialog extends JDialog {
                 BorderFactory.createEtchedBorder(), bundle.getString("dialog.config.border"),
                 TitledBorder.LEFT, TitledBorder.TOP));
 
-        JScrollPane scrollPane = new JScrollPane(jsonArea);
-        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-        claudePanel.add(scrollPane, BorderLayout.CENTER);
+        claudePanel.add(configTabs, BorderLayout.CENTER);
 
         JPanel claudeButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         JButton copyButton = new JButton(bundle.getString("dialog.button.copyClipboard"));
-        copyButton.addActionListener(e -> onCopyJson());
+        copyButton.addActionListener(e -> onCopyConfig());
         claudeButtons.add(copyButton);
         claudeButtons.add(configureButton);
 
@@ -373,13 +392,21 @@ public class McpSettingsDialog extends JDialog {
         return httpServer.getPort();
     }
 
-    private void updateJsonArea() {
-        jsonArea.setText(ClaudeDesktopConfigurator.generateMcpJson(getDisplayPort()));
-        jsonArea.setCaretPosition(0);
+    private void updateConfigViews() {
+        int port = getDisplayPort();
+        sseEndpointField.setText(McpEndpointUrls.sseLocalhostUrl(port));
+        sseEndpointField.setCaretPosition(0);
+        mcpEndpointField.setText(McpEndpointUrls.mcpLocalhostUrl(port));
+        mcpEndpointField.setCaretPosition(0);
+
+        mcpJsonArea.setText(ClaudeDesktopConfigurator.generateStreamableHttpJson(port));
+        mcpJsonArea.setCaretPosition(0);
+        claudeJsonArea.setText(ClaudeDesktopConfigurator.generateClaudeDesktopJson(port));
+        claudeJsonArea.setCaretPosition(0);
     }
 
-    private void onCopyJson() {
-        String json = jsonArea.getText();
+    private void onCopyConfig() {
+        String json = getSelectedConfigArea().getText();
         Toolkit.getDefaultToolkit().getSystemClipboard()
                 .setContents(new StringSelection(json), null);
         JOptionPane.showMessageDialog(this, bundle.getString("dialog.clipboard.message"),
@@ -414,7 +441,32 @@ public class McpSettingsDialog extends JDialog {
                 bundle.getString("dialog.error.title"), JOptionPane.ERROR_MESSAGE);
     }
 
-    private void installContextMenu(JTextArea area) {
+    private JTextArea createConfigArea() {
+        JTextArea area = new JTextArea(8, 42);
+        area.setEditable(false);
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        installContextMenu(area);
+        return area;
+    }
+
+    private JScrollPane wrapConfigArea(JTextArea area) {
+        JScrollPane scrollPane = new JScrollPane(area);
+        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        return scrollPane;
+    }
+
+    private JTextField createReadOnlyField() {
+        JTextField field = new JTextField(42);
+        field.setEditable(false);
+        installContextMenu(field);
+        return field;
+    }
+
+    private JTextArea getSelectedConfigArea() {
+        return configTabs.getSelectedIndex() == 0 ? mcpJsonArea : claudeJsonArea;
+    }
+
+    private void installContextMenu(JTextComponent area) {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem copyItem = new JMenuItem(bundle.getString("dialog.context.copy"));
         copyItem.addActionListener(e -> area.copy());

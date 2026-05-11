@@ -39,7 +39,8 @@ class HttpMcpE2ETest {
     private HttpMcpServer server;
     private HttpClient httpClient;
     private int port;
-    private String baseUrl;
+    private String mcpUrl;
+    private String sseUrl;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -64,7 +65,8 @@ class HttpMcpE2ETest {
         }
         assertTrue(server.isRunning(), "Server should be RUNNING on port " + port);
 
-        baseUrl = "http://127.0.0.1:" + port + "/mcp";
+        mcpUrl = "http://127.0.0.1:" + port + "/mcp";
+        sseUrl = "http://127.0.0.1:" + port + "/sse";
 
         httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
@@ -83,12 +85,23 @@ class HttpMcpE2ETest {
     @Test
     @SuppressWarnings("unchecked")
     void testFullMcpLifecycle() throws Exception {
+        assertFullMcpLifecycle(mcpUrl);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testFullSseLifecycle() throws Exception {
+        assertFullMcpLifecycle(sseUrl);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assertFullMcpLifecycle(String endpointUrl) throws Exception {
         // --- Step 1: initialize ---
         String initBody = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
                 + "\"params\":{\"protocolVersion\":\"2025-03-26\","
                 + "\"capabilities\":{},\"clientInfo\":{\"name\":\"e2e-test\",\"version\":\"1.0\"}}}";
 
-        HttpResponse<String> initResponse = post(initBody, null);
+        HttpResponse<String> initResponse = post(endpointUrl, initBody, null);
 
         assertEquals(200, initResponse.statusCode(), "initialize should return 200");
         assertContentTypeJson(initResponse);
@@ -120,7 +133,7 @@ class HttpMcpE2ETest {
         // --- Step 2: tools/list ---
         String toolsListBody = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}";
 
-        HttpResponse<String> toolsListResponse = post(toolsListBody, sessionId);
+        HttpResponse<String> toolsListResponse = post(endpointUrl, toolsListBody, sessionId);
 
         assertEquals(200, toolsListResponse.statusCode(), "tools/list should return 200");
         assertContentTypeJson(toolsListResponse);
@@ -156,7 +169,7 @@ class HttpMcpE2ETest {
         String toolsCallBody = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\","
                 + "\"params\":{\"name\":\"get_state\",\"arguments\":{}}}";
 
-        HttpResponse<String> toolsCallResponse = post(toolsCallBody, sessionId);
+        HttpResponse<String> toolsCallResponse = post(endpointUrl, toolsCallBody, sessionId);
 
         assertEquals(200, toolsCallResponse.statusCode(), "tools/call should return 200");
         assertContentTypeJson(toolsCallResponse);
@@ -199,7 +212,7 @@ class HttpMcpE2ETest {
 
         // --- Step 4: DELETE (session cleanup) ---
         HttpRequest deleteRequest = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl))
+                .uri(URI.create(endpointUrl))
                 .header("Content-Type", "application/json")
                 .header("Mcp-Session-Id", sessionId)
                 .DELETE()
@@ -217,7 +230,7 @@ class HttpMcpE2ETest {
     void testToolsListWithoutSessionReturns400() throws Exception {
         String body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}";
 
-        HttpResponse<String> response = post(body, null);
+        HttpResponse<String> response = post(mcpUrl, body, null);
 
         assertEquals(400, response.statusCode(),
                 "tools/list without Mcp-Session-Id should return 400");
@@ -230,7 +243,7 @@ class HttpMcpE2ETest {
     void testPingWithoutSession() throws Exception {
         String body = "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"ping\"}";
 
-        HttpResponse<String> response = post(body, null);
+        HttpResponse<String> response = post(mcpUrl, body, null);
 
         assertEquals(200, response.statusCode(), "ping should return 200");
         assertContentTypeJson(response);
@@ -247,7 +260,7 @@ class HttpMcpE2ETest {
         String body = "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\","
                 + "\"params\":{\"name\":\"nonexistent_tool\",\"arguments\":{}}}";
 
-        HttpResponse<String> response = post(body, sessionId);
+        HttpResponse<String> response = post(mcpUrl, body, sessionId);
 
         assertEquals(200, response.statusCode());
         Map<String, Object> parsed = parseJsonRpc(response.body());
@@ -258,9 +271,26 @@ class HttpMcpE2ETest {
     }
 
     @Test
-    void testDeleteWithoutSessionReturns200() throws Exception {
+    void testMcpDeleteWithoutSessionReturns400() throws Exception {
         HttpRequest deleteRequest = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl))
+                .uri(URI.create(mcpUrl))
+                .header("Content-Type", "application/json")
+                .DELETE()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(deleteRequest,
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(400, response.statusCode(),
+                "DELETE without session should return 400 on /mcp");
+        assertTrue(response.body().contains("Missing Mcp-Session-Id"),
+                "Error should mention missing session header");
+    }
+
+    @Test
+    void testSseDeleteWithoutSessionReturns200() throws Exception {
+        HttpRequest deleteRequest = HttpRequest.newBuilder()
+                .uri(URI.create(sseUrl))
                 .header("Content-Type", "application/json")
                 .DELETE()
                 .build();
@@ -269,7 +299,20 @@ class HttpMcpE2ETest {
                 HttpResponse.BodyHandlers.ofString());
 
         assertEquals(200, response.statusCode(),
-                "DELETE without session should still return 200");
+                "DELETE without session should still return 200 on /sse");
+    }
+
+    @Test
+    void testMcpUnknownSessionReturns404() throws Exception {
+        String body = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}";
+
+        HttpResponse<String> response = post(mcpUrl, body, "never-seen-session-id");
+
+        assertEquals(404, response.statusCode(),
+                "/mcp tools/list with unknown session should return 404");
+        assertContentTypeJson(response);
+        assertTrue(response.body().contains("Unknown or expired session"),
+                "Error should mention missing MCP session");
     }
 
     @Test
@@ -291,7 +334,7 @@ class HttpMcpE2ETest {
 
     @Test
     void testInvalidJsonReturns400() throws Exception {
-        HttpResponse<String> response = post("{not valid json}", null);
+        HttpResponse<String> response = post(mcpUrl, "{not valid json}", null);
 
         assertEquals(400, response.statusCode(), "Invalid JSON should return 400");
         assertContentTypeJson(response);
@@ -301,7 +344,7 @@ class HttpMcpE2ETest {
 
     @Test
     void testEmptyBodyReturns400() throws Exception {
-        HttpResponse<String> response = post("", null);
+        HttpResponse<String> response = post(mcpUrl, "", null);
 
         assertEquals(400, response.statusCode(), "Empty body should return 400");
         assertTrue(response.body().contains("Empty request body"),
@@ -310,9 +353,9 @@ class HttpMcpE2ETest {
 
     // === Helper methods ===
 
-    private HttpResponse<String> post(String body, String sessionId) throws Exception {
+    private HttpResponse<String> post(String url, String body, String sessionId) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl))
+                .uri(URI.create(url))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .timeout(Duration.ofSeconds(10));
@@ -329,7 +372,7 @@ class HttpMcpE2ETest {
         String initBody = "{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\","
                 + "\"params\":{\"protocolVersion\":\"2025-03-26\"}}";
 
-        HttpResponse<String> response = post(initBody, null);
+        HttpResponse<String> response = post(mcpUrl, initBody, null);
         assertEquals(200, response.statusCode());
 
         return response.headers()

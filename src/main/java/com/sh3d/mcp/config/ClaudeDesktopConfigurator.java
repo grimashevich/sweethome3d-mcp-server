@@ -1,5 +1,6 @@
 package com.sh3d.mcp.config;
 
+import com.sh3d.mcp.http.McpEndpointUrls;
 import com.sh3d.mcp.protocol.JsonUtil;
 
 import java.io.IOException;
@@ -54,11 +55,21 @@ public class ClaudeDesktopConfigurator {
     /**
      * Генерирует pretty-printed JSON для MCP-секции Claude Desktop.
      * Claude Desktop не поддерживает "type": "http" напрямую —
-     * используется npx mcp-remote как stdio-мост к HTTP endpoint.
+     * используется npx mcp-remote как stdio-мост к MCP Streamable HTTP endpoint.
      */
     public static String generateMcpJson(int port) {
-        Map<String, Object> serverEntry = buildServerEntry(port);
+        return generateClaudeDesktopJson(port);
+    }
 
+    public static String generateClaudeDesktopJson(int port) {
+        return serializeSingleServerConfig(buildClaudeDesktopServerEntry(port));
+    }
+
+    public static String generateStreamableHttpJson(int port) {
+        return serializeSingleServerConfig(buildStreamableHttpServerEntry(port));
+    }
+
+    private static String serializeSingleServerConfig(Map<String, Object> serverEntry) {
         Map<String, Object> servers = new LinkedHashMap<>();
         servers.put("sweethome3d", serverEntry);
 
@@ -68,12 +79,19 @@ public class ClaudeDesktopConfigurator {
         return JsonUtil.serializePretty(root);
     }
 
-    private static Map<String, Object> buildServerEntry(int port) {
+    private static Map<String, Object> buildClaudeDesktopServerEntry(int port) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("command", "npx");
         List<Object> args = new ArrayList<>(Arrays.asList(
-                "-y", "mcp-remote", "http://localhost:" + port + "/mcp"));
+                "-y", "mcp-remote", McpEndpointUrls.mcpLocalhostUrl(port)));
         entry.put("args", args);
+        return entry;
+    }
+
+    private static Map<String, Object> buildStreamableHttpServerEntry(int port) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("type", "http");
+        entry.put("url", McpEndpointUrls.mcpLocalhostUrl(port));
         return entry;
     }
 
@@ -127,7 +145,7 @@ public class ClaudeDesktopConfigurator {
             root.put("mcpServers", mcpServers);
         }
 
-        mcpServers.put("sweethome3d", buildServerEntry(port));
+        mcpServers.put("sweethome3d", buildClaudeDesktopServerEntry(port));
 
         // Записать
         String prettyJson = JsonUtil.serializePretty(root);

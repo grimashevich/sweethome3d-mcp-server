@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- V2 endpoint layout with Streamable HTTP MCP on `/mcp` and the legacy SSE-style transport on `/sse`
+- Settings dialog now shows both endpoint URLs and separate copy-ready config snippets for Streamable HTTP clients and Claude Desktop
+
+### Changed
+- Claude Desktop auto-config now points `mcp-remote` at the `/mcp` endpoint
+- README and architecture docs now document the two-endpoint transport layout
+
 ## [1.1.0] - 2026-03-13
 
 ### Added

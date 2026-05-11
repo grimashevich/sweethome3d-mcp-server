@@ -82,7 +82,7 @@ public class CommandRegistry {
 
     /**
      * Возвращает неизменяемое представление зарегистрированных обработчиков.
-     * Используется McpRequestHandler для итерации при tools/list.
+     * Используется HTTP MCP request handlers для итерации при tools/list.
      */
     public Map<String, CommandHandler> getHandlers() {
         return Collections.unmodifiableMap(handlers);

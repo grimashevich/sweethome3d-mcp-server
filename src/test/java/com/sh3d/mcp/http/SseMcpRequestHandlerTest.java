@@ -23,17 +23,17 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class McpRequestHandlerTest {
+class SseMcpRequestHandlerTest {
 
     private CommandRegistry commandRegistry;
     private HomeAccessor mockAccessor;
-    private McpRequestHandler handler;
+    private SseMcpRequestHandler handler;
 
     @BeforeEach
     void setUp() {
         commandRegistry = new CommandRegistry();
         mockAccessor = mock(HomeAccessor.class);
-        handler = new McpRequestHandler(commandRegistry, mockAccessor);
+        handler = new SseMcpRequestHandler(commandRegistry, mockAccessor);
     }
 
     // === POST initialize ===
@@ -417,7 +417,7 @@ class McpRequestHandlerTest {
     @Test
     void testBodyExceedingLimitReturns413() throws Exception {
         // Create a body larger than MAX_REQUEST_BODY_SIZE
-        int limit = McpRequestHandler.MAX_REQUEST_BODY_SIZE;
+        int limit = SseMcpRequestHandler.MAX_REQUEST_BODY_SIZE;
         char[] bigChars = new char[limit + 100];
         java.util.Arrays.fill(bigChars, 'x');
         String bigBody = new String(bigChars);
@@ -435,7 +435,7 @@ class McpRequestHandlerTest {
     @Test
     void testBodyAtExactLimitIsAccepted() throws Exception {
         // A body exactly at the limit should be accepted (and then fail on invalid JSON)
-        int limit = McpRequestHandler.MAX_REQUEST_BODY_SIZE;
+        int limit = SseMcpRequestHandler.MAX_REQUEST_BODY_SIZE;
         char[] exactChars = new char[limit];
         java.util.Arrays.fill(exactChars, '{');
         String exactBody = new String(exactChars);
@@ -453,7 +453,7 @@ class McpRequestHandlerTest {
 
     @Test
     void testMaxRequestBodySizeIs10MB() {
-        assertEquals(10 * 1024 * 1024, McpRequestHandler.MAX_REQUEST_BODY_SIZE);
+        assertEquals(10 * 1024 * 1024, SseMcpRequestHandler.MAX_REQUEST_BODY_SIZE);
     }
 
     // === Origin validation ===
