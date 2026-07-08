@@ -48,6 +48,19 @@ Claude Desktop / Claude Code
 
 > You can verify it is running: **Tools → MCP Server...** shows the server status.
 
+## Troubleshooting
+
+### macOS: the MCP server won't start (cannot open port)
+
+The **Mac App Store** build of Sweet Home 3D is sandboxed and ships without the
+`com.apple.security.network.server` entitlement, so it is not allowed to open a
+listening socket. Because the plugin listens on port `9877`, the MCP server
+cannot start under that build.
+
+**Fix:** use a non-sandboxed build of Sweet Home 3D — the standalone "Java
+version" / installer from [sweethome3d.com](https://www.sweethome3d.com/)
+instead of the Mac App Store version.
+
 ## Claude Configuration
 
 Add to your Claude Desktop `claude_desktop_config.json`:
