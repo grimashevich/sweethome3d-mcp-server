@@ -1,10 +1,13 @@
 package com.sh3d.mcp.command.handler;
 
+import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
 import com.eteks.sweethome3d.model.FurnitureCatalog;
 import com.eteks.sweethome3d.model.FurnitureCategory;
 import com.eteks.sweethome3d.model.Home;
+import com.eteks.sweethome3d.model.HomeDoorOrWindow;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
+import com.eteks.sweethome3d.model.Sash;
 import com.eteks.sweethome3d.model.UserPreferences;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
@@ -39,8 +42,13 @@ class PlaceFurnitureHandlerTest {
         CatalogPieceOfFurniture chair = new CatalogPieceOfFurniture(
                 "Office Chair", null, null, 50f, 50f, 90f, true, false);
 
+        CatalogDoorOrWindow window = new CatalogDoorOrWindow(
+                "test#garden-window", "Garden Window", null, null, null,
+                120f, 8f, 100f, 90f, false, 1f, 0f, new Sash[0], null, null, true, null, null);
+
         catalog.add(category, table);
         catalog.add(category, chair);
+        catalog.add(category, window);
 
         UserPreferences prefs = mock(UserPreferences.class);
         when(prefs.getFurnitureCatalog()).thenReturn(catalog);
@@ -477,5 +485,20 @@ class PlaceFurnitureHandlerTest {
         assertTrue(resp.isError());
         assertTrue(resp.getMessage().contains("name"));
         assertTrue(resp.getMessage().contains("catalogId"));
+    }
+
+    @Test
+    void testCatalogWindowPlacedAsHomeDoorOrWindow() {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Garden Window");
+        params.put("x", 100.0);
+        params.put("y", 0.0);
+
+        Response resp = handler.execute(new Request("place_furniture", params), accessor);
+
+        assertTrue(resp.isOk());
+        HomePieceOfFurniture placed = home.getFurniture().get(0);
+        assertTrue(placed instanceof HomeDoorOrWindow);
+        assertTrue(placed.isDoorOrWindow());
     }
 }

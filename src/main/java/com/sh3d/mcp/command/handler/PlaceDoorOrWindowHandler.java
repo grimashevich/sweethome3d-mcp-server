@@ -4,8 +4,10 @@ import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.CatalogSearchUtil;
 
+import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
 import com.eteks.sweethome3d.model.Home;
+import com.eteks.sweethome3d.model.HomeDoorOrWindow;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
@@ -90,7 +92,9 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             float y = yStart + position * (yEnd - yStart);
             float angle = (float) Math.atan2(yEnd - yStart, xEnd - xStart);
 
-            HomePieceOfFurniture piece = new HomePieceOfFurniture(found);
+            HomePieceOfFurniture piece = (found instanceof CatalogDoorOrWindow)
+                    ? new HomeDoorOrWindow((CatalogDoorOrWindow) found)
+                    : new HomePieceOfFurniture(found);
             // Auto-fit depth to wall thickness for proper rendering
             float wallThickness = wall.getThickness();
             if (piece.getDepth() < wallThickness) {
@@ -99,6 +103,10 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             piece.setX(x);
             piece.setY(y);
             piece.setAngle(angle);
+            if (piece instanceof HomeDoorOrWindow) {
+                // Keep the piece attached to its wall, as the app does when a door is dropped on one
+                ((HomeDoorOrWindow) piece).setBoundToWall(true);
+            }
 
             if (hasElevation) {
                 piece.setElevation(elevation);
