@@ -3,6 +3,7 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.CatalogSearchUtil;
+import com.sh3d.mcp.command.util.SashUtil;
 
 import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
@@ -114,6 +115,12 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             if (mirrored != null && mirrored) {
                 piece.setModelMirrored(true);
             }
+            String sashError = SashUtil.applyFromParams(piece, request.getParams());
+            if (sashError != null) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", sashError);
+                return err;
+            }
 
             home.addPieceOfFurniture(piece);
 
@@ -127,6 +134,9 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
 
         if (data == null) {
             return Response.error("Wall not found: " + wallId);
+        }
+        if (data.containsKey("error")) {
+            return Response.error(String.valueOf(data.get("error")));
         }
 
         return Response.ok(data);
@@ -158,6 +168,11 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
                         "Position along the wall: 0.0 = start, 0.5 = center, 1.0 = end", 0.5)
                 .number("elevation", "Height above floor in cm. Doors default to 0, windows typically 80-100")
                 .boolWithDefault("mirrored", "Mirror the door/window model (e.g., change hinge side)", false)
+                .enumProp(SashUtil.PARAM_PRESET,
+                        "Swing arc preset for the 2D plan when the catalog model has none: "
+                        + "'single_left', 'single_right', 'double', 'none'",
+                        SashUtil.PRESETS)
+                .array(SashUtil.PARAM_SASHES, ModifyFurnitureHandler.sashArraySchema())
                 .build();
     }
 

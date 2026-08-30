@@ -724,4 +724,50 @@ class PlaceDoorOrWindowHandlerTest {
         assertFalse(placed instanceof HomeDoorOrWindow);
         assertTrue(placed.isDoorOrWindow());
     }
+
+    // --- Sash parameters ---
+
+    @Test
+    void testSashPresetOverridesCatalogSashes() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "double");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertTrue(resp.isOk());
+        assertEquals(2, ((Number) resp.getData().get("sashes")).intValue());
+        assertEquals(2, ((HomeDoorOrWindow) home.getFurniture().get(0)).getSashes().length);
+    }
+
+    @Test
+    void testUnknownSashPresetIsRejectedAndNothingPlaced() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "revolving");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertFalse(resp.isOk());
+        assertTrue(home.getFurniture().isEmpty());
+    }
+
+    @Test
+    void testSashCountReportedForPlacedDoor() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertEquals(1, ((Number) resp.getData().get("sashes")).intValue());
+    }
 }

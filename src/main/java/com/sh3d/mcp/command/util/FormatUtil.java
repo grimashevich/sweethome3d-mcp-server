@@ -71,6 +71,9 @@ public final class FormatUtil {
         info.put("width", round2(piece.getWidth()));
         info.put("depth", round2(piece.getDepth()));
         info.put("height", round2(piece.getHeight()));
+        if (piece.isDoorOrWindow()) {
+            info.put("sashes", SashUtil.count(piece));
+        }
         return info;
     }
 
