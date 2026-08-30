@@ -3,6 +3,7 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.ColorParser;
+import com.sh3d.mcp.command.util.SashUtil;
 
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
@@ -28,7 +29,7 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
 
     private static final List<String> MODIFIABLE_KEYS = Arrays.asList(
             "x", "y", "angle", "elevation", "width", "depth", "height",
-            "color", "visible", "mirrored", "name"
+            "color", "visible", "mirrored", "name", SashUtil.PARAM_PRESET, SashUtil.PARAM_SASHES
     );
 
     @Override
@@ -42,7 +43,7 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
         boolean hasModifiable = MODIFIABLE_KEYS.stream().anyMatch(params::containsKey);
         if (!hasModifiable) {
             return Response.error("No modifiable properties provided. "
-                    + "Supported: x, y, angle, elevation, width, depth, height, color, visible, mirrored, name");
+                    + "Supported: x, y, angle, elevation, width, depth, height, color, visible, mirrored, name, sashPreset, sashes");
         }
 
         // Validate color format before EDT
@@ -112,6 +113,14 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
                 }
             }
 
+            // Sashes (door/window swing arcs)
+            String sashError = SashUtil.applyFromParams(piece, params);
+            if (sashError != null) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", sashError);
+                return err;
+            }
+
             // Build response with current state
             Map<String, Object> result = FormatUtil.buildFurnitureInfo(piece);
             result.put("color", colorToHex(piece.getColor()));
@@ -122,6 +131,9 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
 
         if (data == null) {
             return Response.error("Furniture not found: " + id);
+        }
+        if (data.containsKey("error")) {
+            return Response.error(String.valueOf(data.get("error")));
         }
 
         return Response.ok(data);
@@ -150,7 +162,38 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
                 .bool("visible", "Whether furniture is visible in the scene")
                 .bool("mirrored", "Whether furniture model is mirrored")
                 .string("name", "New display name for the furniture")
+                .enumProp(SashUtil.PARAM_PRESET,
+                        "Doors/windows only. Swing arc preset drawn in the 2D plan: 'single_left' (hinge at the "
+                        + "piece's left end), 'single_right', 'double' (two leaves meeting in the middle), 'none'. "
+                        + "Use when the catalog model has no sash data (get_state reports sashes=0)",
+                        SashUtil.PRESETS)
+                .array(SashUtil.PARAM_SASHES, sashArraySchema())
                 .build();
+    }
+
+    /** JSON Schema for an explicit sash list; shared with place_door_or_window. */
+    static Map<String, Object> sashArraySchema() {
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("xAxis", numberProp("Hinge X as a fraction of width: 0 = left end, 1 = right end"));
+        props.put("yAxis", numberProp("Hinge Y as a fraction of depth (default 0.5)"));
+        props.put("width", numberProp("Leaf width as a fraction of piece width (default 1)"));
+        props.put("startAngle", numberProp("Closed-leaf angle in degrees (default 0)"));
+        props.put("endAngle", numberProp("Open-leaf angle in degrees (default 90)"));
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("type", "object");
+        item.put("properties", props);
+        Map<String, Object> arr = new LinkedHashMap<>();
+        arr.put("type", "array");
+        arr.put("description", "Doors/windows only. Explicit sash list; overrides sashPreset");
+        arr.put("items", item);
+        return arr;
+    }
+
+    private static Map<String, Object> numberProp(String description) {
+        Map<String, Object> prop = new LinkedHashMap<>();
+        prop.put("type", "number");
+        prop.put("description", description);
+        return prop;
     }
 
 }

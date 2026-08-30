@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `sashPreset` (`single_left`, `single_right`, `double`, `none`) and `sashes` (explicit list of `{xAxis, yAxis, width, startAngle, endAngle}`, angles in degrees) parameters on `place_door_or_window` and `modify_furniture`, so a swing arc can be drawn in the 2D plan for catalog doors and windows that ship without sash data. Furniture results now include a `sashes` count for doors and windows, so `get_state` shows which pieces have none.
+
+### Fixed
+- `place_door_or_window` and `place_furniture` now create a `HomeDoorOrWindow` when the catalog item is a door or window, instead of a generic `HomePieceOfFurniture` flagged as one. The generic piece lost the catalog's sash definitions (no swing arc in the plan, hinge side not switchable with `mirrored`), the wall cut-out shape and the frame-to-wall metadata, so doors rendered as a narrow leaf floating in an oversized opening. Placed doors are also bound to their wall, as the app does on drop.
+
 ### Documentation
 - Added a Troubleshooting section documenting the macOS Mac App Store sandbox limitation: that build lacks the `com.apple.security.network.server` entitlement, so the MCP server cannot open its listening port. Use a non-sandboxed Sweet Home 3D build instead. (#2)
 

@@ -1,10 +1,13 @@
 package com.sh3d.mcp.command.handler;
 
+import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
 import com.eteks.sweethome3d.model.FurnitureCatalog;
 import com.eteks.sweethome3d.model.FurnitureCategory;
 import com.eteks.sweethome3d.model.Home;
+import com.eteks.sweethome3d.model.HomeDoorOrWindow;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
+import com.eteks.sweethome3d.model.Sash;
 import com.eteks.sweethome3d.model.UserPreferences;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
@@ -51,7 +54,16 @@ class PlaceDoorOrWindowHandlerTest {
         CatalogPieceOfFurniture table = new CatalogPieceOfFurniture(
                 "Dining Table", null, null, 120f, 80f, 75f, true, false);
 
+        // A real catalog door, as loaded from a furniture library: carries sashes
+        // and wall metadata that only HomeDoorOrWindow preserves.
+        CatalogDoorOrWindow sashDoor = new CatalogDoorOrWindow(
+                "test#sash-door", "Sash Door", null, null, null,
+                90f, 12f, 210f, 0f, false, 1f, 0f,
+                new Sash[] { new Sash(0f, 0f, 1f, 0f, (float) Math.PI / 2) },
+                null, null, true, null, null);
+
         catalog.add(doorsCategory, door);
+        catalog.add(doorsCategory, sashDoor);
         catalog.add(windowsCategory, window);
         catalog.add(furnitureCategory, table);
 
@@ -675,5 +687,87 @@ class PlaceDoorOrWindowHandlerTest {
         assertTrue(resp.isError());
         assertTrue(resp.getMessage().contains("name"));
         assertTrue(resp.getMessage().contains("catalogId"));
+    }
+
+    // --- Door/window class ---
+
+    @Test
+    void testCatalogDoorBecomesHomeDoorOrWindow() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertTrue(resp.isOk());
+        HomePieceOfFurniture placed = home.getFurniture().get(0);
+        assertTrue(placed instanceof HomeDoorOrWindow,
+                "catalog doors must be placed as HomeDoorOrWindow, not a generic piece");
+        HomeDoorOrWindow door = (HomeDoorOrWindow) placed;
+        assertEquals(1, door.getSashes().length, "sashes from the catalog are kept");
+        assertTrue(door.isBoundToWall());
+    }
+
+    @Test
+    void testGenericDoorFlagStillPlacedAsPlainPiece() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Front Door");
+        params.put("wallId", wall.getId());
+
+        handler.execute(new Request("place_door_or_window", params), accessor);
+
+        HomePieceOfFurniture placed = home.getFurniture().get(0);
+        assertFalse(placed instanceof HomeDoorOrWindow);
+        assertTrue(placed.isDoorOrWindow());
+    }
+
+    // --- Sash parameters ---
+
+    @Test
+    void testSashPresetOverridesCatalogSashes() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "double");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertTrue(resp.isOk());
+        assertEquals(2, ((Number) resp.getData().get("sashes")).intValue());
+        assertEquals(2, ((HomeDoorOrWindow) home.getFurniture().get(0)).getSashes().length);
+    }
+
+    @Test
+    void testUnknownSashPresetIsRejectedAndNothingPlaced() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "revolving");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertFalse(resp.isOk());
+        assertTrue(home.getFurniture().isEmpty());
+    }
+
+    @Test
+    void testSashCountReportedForPlacedDoor() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertEquals(1, ((Number) resp.getData().get("sashes")).intValue());
     }
 }

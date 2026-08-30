@@ -3,9 +3,12 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.CatalogSearchUtil;
+import com.sh3d.mcp.command.util.SashUtil;
 
+import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
 import com.eteks.sweethome3d.model.Home;
+import com.eteks.sweethome3d.model.HomeDoorOrWindow;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
@@ -90,7 +93,9 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             float y = yStart + position * (yEnd - yStart);
             float angle = (float) Math.atan2(yEnd - yStart, xEnd - xStart);
 
-            HomePieceOfFurniture piece = new HomePieceOfFurniture(found);
+            HomePieceOfFurniture piece = (found instanceof CatalogDoorOrWindow)
+                    ? new HomeDoorOrWindow((CatalogDoorOrWindow) found)
+                    : new HomePieceOfFurniture(found);
             // Auto-fit depth to wall thickness for proper rendering
             float wallThickness = wall.getThickness();
             if (piece.getDepth() < wallThickness) {
@@ -99,12 +104,22 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             piece.setX(x);
             piece.setY(y);
             piece.setAngle(angle);
+            if (piece instanceof HomeDoorOrWindow) {
+                // Keep the piece attached to its wall, as the app does when a door is dropped on one
+                ((HomeDoorOrWindow) piece).setBoundToWall(true);
+            }
 
             if (hasElevation) {
                 piece.setElevation(elevation);
             }
             if (mirrored != null && mirrored) {
                 piece.setModelMirrored(true);
+            }
+            String sashError = SashUtil.applyFromParams(piece, request.getParams());
+            if (sashError != null) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", sashError);
+                return err;
             }
 
             home.addPieceOfFurniture(piece);
@@ -119,6 +134,9 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
 
         if (data == null) {
             return Response.error("Wall not found: " + wallId);
+        }
+        if (data.containsKey("error")) {
+            return Response.error(String.valueOf(data.get("error")));
         }
 
         return Response.ok(data);
@@ -150,6 +168,11 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
                         "Position along the wall: 0.0 = start, 0.5 = center, 1.0 = end", 0.5)
                 .number("elevation", "Height above floor in cm. Doors default to 0, windows typically 80-100")
                 .boolWithDefault("mirrored", "Mirror the door/window model (e.g., change hinge side)", false)
+                .enumProp(SashUtil.PARAM_PRESET,
+                        "Swing arc preset for the 2D plan when the catalog model has none: "
+                        + "'single_left', 'single_right', 'double', 'none'",
+                        SashUtil.PRESETS)
+                .array(SashUtil.PARAM_SASHES, ModifyFurnitureHandler.sashArraySchema())
                 .build();
     }
 

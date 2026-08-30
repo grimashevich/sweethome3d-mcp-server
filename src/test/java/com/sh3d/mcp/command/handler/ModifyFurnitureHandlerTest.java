@@ -1,8 +1,11 @@
 package com.sh3d.mcp.command.handler;
 
+import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
 import com.eteks.sweethome3d.model.Home;
+import com.eteks.sweethome3d.model.HomeDoorOrWindow;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
+import com.eteks.sweethome3d.model.Sash;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
@@ -267,6 +270,65 @@ class ModifyFurnitureHandlerTest {
         List<String> required = (List<String>) schema.get("required");
         assertTrue(required.contains("id"));
         assertEquals(1, required.size());
+    }
+
+    // --- Sashes (door/window swing arcs) ---
+
+    @Test
+    void testSashPresetOnDoor() {
+        HomeDoorOrWindow door = addDoor("Door");
+
+        Response resp = handler.execute(makeRequest(door.getId(), "sashPreset", "double"), accessor);
+
+        assertTrue(resp.isOk());
+        assertEquals(2, door.getSashes().length);
+        assertEquals(2, ((Number) resp.getData().get("sashes")).intValue());
+    }
+
+    @Test
+    void testExplicitSashesOnDoor() {
+        HomeDoorOrWindow door = addDoor("Door");
+        Map<String, Object> sash = new LinkedHashMap<>();
+        sash.put("xAxis", 1);
+        sash.put("startAngle", 180);
+        sash.put("endAngle", 90);
+
+        Response resp = handler.execute(
+                makeRequest(door.getId(), "sashes", List.of(sash)), accessor);
+
+        assertTrue(resp.isOk());
+        assertEquals(1, door.getSashes().length);
+        assertEquals(1f, door.getSashes()[0].getXAxis(), 0.001f);
+    }
+
+    @Test
+    void testSashPresetRejectedOnPlainFurniture() {
+        HomePieceOfFurniture table = addFurniture("Table", 0, 0);
+
+        Response resp = handler.execute(makeRequest(table.getId(), "sashPreset", "single_left"), accessor);
+
+        assertFalse(resp.isOk());
+        assertTrue(resp.getMessage().toLowerCase().contains("doors and windows"));
+    }
+
+    @Test
+    void testUnknownSashPresetRejected() {
+        HomeDoorOrWindow door = addDoor("Door");
+
+        Response resp = handler.execute(makeRequest(door.getId(), "sashPreset", "revolving"), accessor);
+
+        assertFalse(resp.isOk());
+        assertEquals(0, door.getSashes().length);
+    }
+
+    private HomeDoorOrWindow addDoor(String name) {
+        CatalogDoorOrWindow catalogDoor = new CatalogDoorOrWindow(
+                "test#" + name, name, null, null, null,
+                90f, 12f, 210f, 0f, false, 1f, 0f,
+                new Sash[0], null, null, true, null, null);
+        HomeDoorOrWindow door = new HomeDoorOrWindow(catalogDoor);
+        home.addPieceOfFurniture(door);
+        return door;
     }
 
     private HomePieceOfFurniture addFurniture(String name, float x, float y) {
