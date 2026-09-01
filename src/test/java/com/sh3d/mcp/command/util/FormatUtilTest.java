@@ -1,10 +1,19 @@
 package com.sh3d.mcp.command.util;
 
+import com.eteks.sweethome3d.model.DimensionLine;
+import com.eteks.sweethome3d.model.HomeEnvironment;
+import com.eteks.sweethome3d.model.Label;
+import com.eteks.sweethome3d.model.Level;
+import com.eteks.sweethome3d.model.Wall;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -319,6 +328,159 @@ class FormatUtilTest {
             assertNotNull(parsed);
             String roundTripped = FormatUtil.colorToHex(parsed);
             assertEquals(hex.toUpperCase(), roundTripped);
+        }
+    }
+
+    // ==================== levelName ====================
+
+    @Nested
+    class LevelName {
+
+        @Test
+        void returnsNullWhenObjectHasNoLevel() {
+            assertNull(FormatUtil.levelName(null));
+        }
+
+        @Test
+        void returnsTheLevelName() {
+            assertEquals("Ground floor",
+                    FormatUtil.levelName(new Level("Ground floor", 0, 12, 250)));
+        }
+    }
+
+    // ==================== build*Info key contracts ====================
+
+    /**
+     * These builders are shared by several commands, and each command's JSON response
+     * is the builder's map plus fields the caller appends. Asserting the exact key list
+     * in order pins both the field set and the field order that callers depend on.
+     */
+    @Nested
+    class BuilderKeyContracts {
+
+        private java.util.List<String> keysOf(Map<String, Object> map) {
+            return new ArrayList<>(map.keySet());
+        }
+
+        @Test
+        void wallInfoStartsWithIdAndCoordinatesAndEndsWithLevel() {
+            Wall wall = new Wall(0, 0, 500, 0, 10, 250);
+            java.util.List<String> keys = keysOf(FormatUtil.buildWallInfo(wall));
+
+            assertEquals(Arrays.asList("id", "xStart", "yStart", "xEnd", "yEnd"),
+                    keys.subList(0, 5), "segment prefix must come first, in this order");
+            assertEquals("level", keys.get(keys.size() - 1));
+        }
+
+        @Test
+        void dimensionLineInfoHasExactKeysInOrder() {
+            DimensionLine dim = new DimensionLine(100, 200, 600, 200, 30);
+            assertEquals(
+                    Arrays.asList("id", "xStart", "yStart", "xEnd", "yEnd", "offset", "length", "level"),
+                    keysOf(FormatUtil.buildDimensionLineInfo(dim)));
+        }
+
+        @Test
+        void dimensionLineInfoValues() {
+            DimensionLine dim = new DimensionLine(100, 200, 600, 200, 30);
+            Map<String, Object> info = FormatUtil.buildDimensionLineInfo(dim);
+
+            assertEquals(dim.getId(), info.get("id"));
+            assertEquals(100.0, ((Number) info.get("xStart")).doubleValue(), 0.01);
+            assertEquals(200.0, ((Number) info.get("yStart")).doubleValue(), 0.01);
+            assertEquals(600.0, ((Number) info.get("xEnd")).doubleValue(), 0.01);
+            assertEquals(200.0, ((Number) info.get("yEnd")).doubleValue(), 0.01);
+            assertEquals(30.0, ((Number) info.get("offset")).doubleValue(), 0.01);
+            assertEquals(500.0, ((Number) info.get("length")).doubleValue(), 0.01);
+            assertNull(info.get("level"));
+        }
+
+        @Test
+        void dimensionLineInfoReportsAssignedLevel() {
+            DimensionLine dim = new DimensionLine(0, 0, 500, 0, 25);
+            dim.setLevel(new Level("First floor", 250, 12, 250));
+
+            assertEquals("First floor", FormatUtil.buildDimensionLineInfo(dim).get("level"));
+        }
+
+        @Test
+        void labelInfoHasExactKeysInOrder() {
+            assertEquals(
+                    Arrays.asList("id", "text", "x", "y", "angle", "color"),
+                    keysOf(FormatUtil.buildLabelInfo(new Label("Kitchen", 100, 200))));
+        }
+
+        @Test
+        void labelInfoValuesConvertAngleToDegrees() {
+            Label label = new Label("Kitchen", 100, 200);
+            label.setAngle((float) Math.toRadians(90));
+            label.setColor(0xFF0000);
+            Map<String, Object> info = FormatUtil.buildLabelInfo(label);
+
+            assertEquals("Kitchen", info.get("text"));
+            assertEquals(100.0, ((Number) info.get("x")).doubleValue(), 0.01);
+            assertEquals(200.0, ((Number) info.get("y")).doubleValue(), 0.01);
+            assertEquals(90.0, ((Number) info.get("angle")).doubleValue(), 0.01);
+            assertEquals("#FF0000", info.get("color"));
+        }
+
+        @Test
+        void levelInfoHasExactKeysInOrder() {
+            Level level = new Level("Ground floor", 0, 12, 250);
+            assertEquals(
+                    Arrays.asList("id", "name", "elevation", "height", "floorThickness"),
+                    keysOf(FormatUtil.buildLevelInfo(level.getId(), level)));
+        }
+
+        @Test
+        void levelInfoValues() {
+            Level level = new Level("Ground floor", 0, 12, 250);
+            Map<String, Object> info = FormatUtil.buildLevelInfo(level.getId(), level);
+
+            assertEquals(level.getId(), info.get("id"));
+            assertEquals("Ground floor", info.get("name"));
+            assertEquals(0.0, ((Number) info.get("elevation")).doubleValue(), 0.01);
+            assertEquals(250.0, ((Number) info.get("height")).doubleValue(), 0.01);
+            assertEquals(12.0, ((Number) info.get("floorThickness")).doubleValue(), 0.01);
+        }
+
+        @Test
+        void levelInfoPassesTheIdThroughVerbatim() {
+            // list_levels reports a positional index while get_state and add_level report
+            // the stable HomeObject id, so the builder must not impose either.
+            Level level = new Level("Ground floor", 0, 12, 250);
+
+            assertEquals(0, FormatUtil.buildLevelInfo(0, level).get("id"));
+            assertEquals(3, FormatUtil.buildLevelInfo(3, level).get("id"));
+            assertEquals(level.getId(), FormatUtil.buildLevelInfo(level.getId(), level).get("id"));
+            assertEquals("caller-supplied", FormatUtil.buildLevelInfo("caller-supplied", level).get("id"));
+        }
+
+        @Test
+        void environmentInfoHasExactKeysInOrder() {
+            assertEquals(
+                    Arrays.asList("groundColor", "groundTexture", "skyColor", "skyTexture",
+                            "lightColor", "ceilingLightColor", "wallsAlpha", "drawingMode",
+                            "allLevelsVisible"),
+                    keysOf(FormatUtil.buildEnvironmentInfo(new HomeEnvironment())));
+        }
+
+        @Test
+        void environmentInfoValues() {
+            HomeEnvironment env = new HomeEnvironment();
+            env.setGroundColor(0xD0CC9B);
+            env.setSkyColor(0xCCE4FC);
+            env.setWallsAlpha(0.5f);
+            env.setAllLevelsVisible(true);
+            Map<String, Object> info = FormatUtil.buildEnvironmentInfo(env);
+
+            assertEquals("#D0CC9B", info.get("groundColor"));
+            assertEquals("#CCE4FC", info.get("skyColor"));
+            assertNull(info.get("groundTexture"));
+            assertNull(info.get("skyTexture"));
+            assertEquals(0.5, ((Number) info.get("wallsAlpha")).doubleValue(), 0.01);
+            assertEquals(true, info.get("allLevelsVisible"));
+            assertNotNull(info.get("drawingMode"));
         }
     }
 }
