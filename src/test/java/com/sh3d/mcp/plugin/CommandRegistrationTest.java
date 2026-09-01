@@ -37,8 +37,8 @@ class CommandRegistrationTest {
     @Test
     void testMinimumCommandCount() {
         Map<String, CommandHandler> handlers = registry.getHandlers();
-        assertTrue(handlers.size() >= 39,
-                "Expected at least 39 commands, but found " + handlers.size());
+        assertTrue(handlers.size() >= 41,
+                "Expected at least 41 commands, but found " + handlers.size());
     }
 
     @Test
@@ -77,6 +77,7 @@ class CommandRegistrationTest {
                 "create_room_polygon",
                 "create_wall",
                 "create_walls",
+                "delete_dimension_line",
                 "delete_furniture",
                 "delete_level",
                 "delete_room",
@@ -95,6 +96,7 @@ class CommandRegistrationTest {
                 "list_levels",
                 "list_textures_catalog",
                 "load_home",
+                "modify_dimension_line",
                 "modify_furniture",
                 "modify_room",
                 "modify_wall",

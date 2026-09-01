@@ -36,7 +36,16 @@ Claude Desktop / Claude Code
 
 **Step 1.** Download the latest `.sh3p` file from [Releases](../../releases).
 
-**Step 2.** Copy it to your Sweet Home 3D plugins folder:
+**Step 2.** Install it.
+
+*macOS (easiest): double-click the `.sh3p` file.* Sweet Home 3D opens, installs the
+plugin itself and confirms with a dialog. Nothing to copy by hand. If Finder does not
+open the file with Sweet Home 3D, right-click it and choose **Open With → Sweet Home 3D**.
+Double-clicking works the same way on Windows and Linux wherever the `.sh3p` extension
+is associated with Sweet Home 3D.
+
+*Any platform (manual): copy the file into the plugins folder*, creating the folder if
+it does not exist:
 
 | OS | Plugins folder |
 |----|----------------|
@@ -93,7 +102,7 @@ For Claude Code, create `.mcp.json` in your project directory:
 
 ## Available Commands
 
-42 commands across 12 categories.
+44 commands across 12 categories.
 
 ### Scene
 
@@ -159,6 +168,8 @@ For Claude Code, create `.mcp.json` in your project directory:
 |---------|-------------|
 | `add_label` | Text annotation on the 2D floor plan |
 | `add_dimension_line` | Measurement line with auto-offset |
+| `modify_dimension_line` | Move a dimension line's endpoints or offset by ID |
+| `delete_dimension_line` | Delete dimension line by ID |
 
 ### Camera
 

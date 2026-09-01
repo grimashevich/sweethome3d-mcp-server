@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `modify_dimension_line` — change an existing dimension line's endpoints or offset by ID. Length is always recalculated from the endpoints.
+- `delete_dimension_line` — remove a dimension line from the 2D plan by ID.
+
+  Dimension lines could previously only be added: repositioning one meant deleting it by hand in the app, since `.sh3d` files store a serialized `Home` object rather than editable XML.
+
+### Changed
+- `add_dimension_line` and `get_state` now share `FormatUtil.buildDimensionLineInfo()`. `add_dimension_line` responses gain a `level` field as a result, matching the shape `get_state` already reported.
+- Response-map duplication consolidated into `FormatUtil`, which is now the single place each object type is formatted:
+  - `buildLabelInfo()` — shared by `get_state` and `add_label`
+  - `buildLevelInfo()` — shared by `get_state`, `list_levels`, `add_level` and `set_selected_level`. The `id` is passed in, because `list_levels` reports a positional index while the others report the stable `HomeObject` id.
+  - `buildEnvironmentInfo()` — shared by `get_state` and `set_environment`
+  - `levelName()` and a private `buildSegmentInfo()` for the repeated level lookup and start/end coordinate prefix
+  - `GetStateHandler` routes all six collection builders through one generic `mapAll()` helper
+  All command responses keep their exact fields and key order; callers append the fields that differ.
+
+### Tests
+- `FormatUtilTest` now covers the shared response builders directly: `buildDimensionLineInfo`, `buildLabelInfo`, `buildLevelInfo`, `buildEnvironmentInfo`, `levelName`, and the segment prefix in `buildWallInfo`. Each asserts the exact key list *in order*, pinning the field set and field order that the commands' JSON responses depend on.
+
 ### Documentation
 - Added a Troubleshooting section documenting the macOS Mac App Store sandbox limitation: that build lacks the `com.apple.security.network.server` entitlement, so the MCP server cannot open its listening port. Use a non-sandboxed Sweet Home 3D build instead. (#2)
 
