@@ -22,7 +22,6 @@ import com.sh3d.mcp.protocol.Response;
 
 import static com.sh3d.mcp.command.util.FormatUtil.colorToHex;
 import static com.sh3d.mcp.command.util.FormatUtil.round2;
-import static com.sh3d.mcp.command.util.FormatUtil.textureName;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
@@ -30,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.function.Function;
 import java.util.Map;
 
 /**
@@ -118,24 +118,29 @@ public class GetStateHandler implements CommandHandler, CommandDescriptor {
         return Response.ok(data);
     }
 
+    /**
+     * Maps every element of a collection through a per-item info builder.
+     * Every {@code build*} collection method below is this same loop.
+     */
+    private static <T> List<Object> mapAll(Collection<T> items,
+                                           Function<T, Map<String, Object>> builder) {
+        List<Object> list = new ArrayList<>();
+        for (T item : items) {
+            list.add(builder.apply(item));
+        }
+        return list;
+    }
+
     // --- Wall builders ---
 
     private List<Object> buildWalls(Collection<Wall> walls) {
-        List<Object> list = new ArrayList<>();
-        for (Wall w : walls) {
-            list.add(FormatUtil.buildWallInfo(w));
-        }
-        return list;
+        return mapAll(walls, FormatUtil::buildWallInfo);
     }
 
     // --- Furniture builders ---
 
     private List<Object> buildFurniture(List<HomePieceOfFurniture> furniture) {
-        List<Object> list = new ArrayList<>();
-        for (HomePieceOfFurniture piece : furniture) {
-            list.add(buildFurniturePiece(piece));
-        }
-        return list;
+        return mapAll(furniture, this::buildFurniturePiece);
     }
 
     private Map<String, Object> buildFurniturePiece(HomePieceOfFurniture piece) {
@@ -163,58 +168,30 @@ public class GetStateHandler implements CommandHandler, CommandDescriptor {
             item.put("groupItems", groupItems);
         }
 
-        Level level = piece.getLevel();
-        item.put("level", level != null ? level.getName() : null);
+        item.put("level", FormatUtil.levelName(piece.getLevel()));
         return item;
     }
 
     // --- Room builders ---
 
     private List<Object> buildRooms(List<Room> rooms) {
-        List<Object> list = new ArrayList<>();
-        for (Room room : rooms) {
-            list.add(FormatUtil.buildRoomInfo(room));
-        }
-        return list;
+        return mapAll(rooms, FormatUtil::buildRoomInfo);
     }
 
     // --- Label builders ---
 
     private List<Object> buildLabels(Collection<Label> labels) {
-        List<Object> list = new ArrayList<>();
-        for (Label label : labels) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", label.getId());
-            item.put("text", label.getText());
-            item.put("x", round2(label.getX()));
-            item.put("y", round2(label.getY()));
-            item.put("angle", round2(Math.toDegrees(label.getAngle())));
-            item.put("color", colorToHex(label.getColor()));
-            Level level = label.getLevel();
-            item.put("level", level != null ? level.getName() : null);
-            list.add(item);
-        }
-        return list;
+        return mapAll(labels, label -> {
+            Map<String, Object> item = FormatUtil.buildLabelInfo(label);
+            item.put("level", FormatUtil.levelName(label.getLevel()));
+            return item;
+        });
     }
 
     // --- Dimension line builders ---
 
     private List<Object> buildDimensionLines(Collection<DimensionLine> dimensionLines) {
-        List<Object> list = new ArrayList<>();
-        for (DimensionLine dim : dimensionLines) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", dim.getId());
-            item.put("xStart", round2(dim.getXStart()));
-            item.put("yStart", round2(dim.getYStart()));
-            item.put("xEnd", round2(dim.getXEnd()));
-            item.put("yEnd", round2(dim.getYEnd()));
-            item.put("offset", round2(dim.getOffset()));
-            item.put("length", round2(dim.getLength()));
-            Level level = dim.getLevel();
-            item.put("level", level != null ? level.getName() : null);
-            list.add(item);
-        }
-        return list;
+        return mapAll(dimensionLines, FormatUtil::buildDimensionLineInfo);
     }
 
     // --- Camera builder ---
@@ -228,35 +205,18 @@ public class GetStateHandler implements CommandHandler, CommandDescriptor {
     // --- Level builders ---
 
     private List<Object> buildLevels(List<Level> levels, Level selectedLevel) {
-        List<Object> list = new ArrayList<>();
-        for (Level level : levels) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", level.getId());
-            item.put("name", level.getName());
-            item.put("elevation", round2(level.getElevation()));
-            item.put("height", round2(level.getHeight()));
-            item.put("floorThickness", round2(level.getFloorThickness()));
+        return mapAll(levels, level -> {
+            Map<String, Object> item = FormatUtil.buildLevelInfo(level.getId(), level);
             item.put("viewable", level.isViewable());
             item.put("selected", level.equals(selectedLevel));
-            list.add(item);
-        }
-        return list;
+            return item;
+        });
     }
 
     // --- Environment builder ---
 
     private Map<String, Object> buildEnvironment(HomeEnvironment env) {
-        Map<String, Object> info = new LinkedHashMap<>();
-        info.put("groundColor", colorToHex(env.getGroundColor()));
-        info.put("groundTexture", textureName(env.getGroundTexture()));
-        info.put("skyColor", colorToHex(env.getSkyColor()));
-        info.put("skyTexture", textureName(env.getSkyTexture()));
-        info.put("lightColor", colorToHex(env.getLightColor()));
-        info.put("ceilingLightColor", colorToHex(env.getCeillingLightColor()));
-        info.put("wallsAlpha", round2(env.getWallsAlpha()));
-        info.put("drawingMode", env.getDrawingMode().name());
-        info.put("allLevelsVisible", env.isAllLevelsVisible());
-        return info;
+        return FormatUtil.buildEnvironmentInfo(env);
     }
 
     // --- Descriptor ---

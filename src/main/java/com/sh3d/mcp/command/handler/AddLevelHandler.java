@@ -10,10 +10,9 @@ import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
-import static com.sh3d.mcp.command.util.FormatUtil.round2;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.sh3d.mcp.command.util.FormatUtil;
 
 /**
  * Обработчик команды "add_level".
@@ -46,12 +45,7 @@ public class AddLevelHandler implements CommandHandler, CommandDescriptor {
             home.addLevel(level);
             home.setSelectedLevel(level);
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("id", level.getId());
-            result.put("name", level.getName());
-            result.put("elevation", round2(level.getElevation()));
-            result.put("height", round2(level.getHeight()));
-            result.put("floorThickness", round2(level.getFloorThickness()));
+            Map<String, Object> result = FormatUtil.buildLevelInfo(level.getId(), level);
             result.put("levelCount", home.getLevels().size());
             return result;
         });

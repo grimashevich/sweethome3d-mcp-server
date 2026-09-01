@@ -11,10 +11,9 @@ import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
-import static com.sh3d.mcp.command.util.FormatUtil.round2;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
+import com.sh3d.mcp.command.util.FormatUtil;
 
 /**
  * Обработчик команды "set_selected_level".
@@ -38,12 +37,7 @@ public class SetSelectedLevelHandler implements CommandHandler, CommandDescripto
             }
             home.setSelectedLevel(level);
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("id", id);
-            result.put("name", level.getName());
-            result.put("elevation", round2(level.getElevation()));
-            result.put("height", round2(level.getHeight()));
-            result.put("floorThickness", round2(level.getFloorThickness()));
+            Map<String, Object> result = FormatUtil.buildLevelInfo(id, level);
             result.put("viewable", level.isViewable());
             return result;
         });

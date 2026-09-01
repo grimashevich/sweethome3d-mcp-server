@@ -8,10 +8,9 @@ import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
+import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
-import static com.sh3d.mcp.command.util.FormatUtil.round2;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -59,15 +58,7 @@ public class AddDimensionLineHandler implements CommandHandler, CommandDescripto
             DimensionLine dim = new DimensionLine(xStart, yStart, xEnd, yEnd, offset);
             home.addDimensionLine(dim);
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("id", dim.getId());
-            result.put("xStart", round2(dim.getXStart()));
-            result.put("yStart", round2(dim.getYStart()));
-            result.put("xEnd", round2(dim.getXEnd()));
-            result.put("yEnd", round2(dim.getYEnd()));
-            result.put("offset", round2(dim.getOffset()));
-            result.put("length", round2(dim.getLength()));
-            return result;
+            return FormatUtil.buildDimensionLineInfo(dim);
         });
 
         return Response.ok(data);

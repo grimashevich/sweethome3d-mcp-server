@@ -1,8 +1,11 @@
 package com.sh3d.mcp.command.util;
 
 import com.eteks.sweethome3d.model.Camera;
+import com.eteks.sweethome3d.model.DimensionLine;
+import com.eteks.sweethome3d.model.HomeEnvironment;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.HomeTexture;
+import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.Level;
 import com.eteks.sweethome3d.model.Room;
 import com.eteks.sweethome3d.model.Wall;
@@ -49,6 +52,13 @@ public final class FormatUtil {
     }
 
     /**
+     * Returns the level's name, or null if the object is not assigned to a level.
+     */
+    public static String levelName(Level level) {
+        return level != null ? level.getName() : null;
+    }
+
+    /**
      * Returns the name of a HomeTexture, or null if the texture is null.
      */
     public static String textureName(HomeTexture texture) {
@@ -75,16 +85,27 @@ public final class FormatUtil {
     }
 
     /**
+     * Builds the leading fields shared by objects defined as a segment between two points:
+     * id, xStart, yStart, xEnd, yEnd. Callers append their own fields to the returned map.
+     */
+    private static Map<String, Object> buildSegmentInfo(String id, float xStart, float yStart,
+                                                        float xEnd, float yEnd) {
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("id", id);
+        info.put("xStart", round2(xStart));
+        info.put("yStart", round2(yStart));
+        info.put("xEnd", round2(xEnd));
+        info.put("yEnd", round2(yEnd));
+        return info;
+    }
+
+    /**
      * Builds a standard wall info map with all display fields:
      * id, coordinates, thickness, height, arcExtent, colors, shininess, textures, level.
      */
     public static Map<String, Object> buildWallInfo(Wall wall) {
-        Map<String, Object> info = new LinkedHashMap<>();
-        info.put("id", wall.getId());
-        info.put("xStart", round2(wall.getXStart()));
-        info.put("yStart", round2(wall.getYStart()));
-        info.put("xEnd", round2(wall.getXEnd()));
-        info.put("yEnd", round2(wall.getYEnd()));
+        Map<String, Object> info = buildSegmentInfo(wall.getId(),
+                wall.getXStart(), wall.getYStart(), wall.getXEnd(), wall.getYEnd());
         info.put("thickness", round2(wall.getThickness()));
         info.put("height", wall.getHeight() != null ? round2(wall.getHeight()) : null);
         info.put("heightAtEnd", wall.getHeightAtEnd() != null ? round2(wall.getHeightAtEnd()) : null);
@@ -98,8 +119,20 @@ public final class FormatUtil {
         info.put("rightSideShininess", round2(wall.getRightSideShininess()));
         info.put("leftSideTexture", textureName(wall.getLeftSideTexture()));
         info.put("rightSideTexture", textureName(wall.getRightSideTexture()));
-        Level wallLevel = wall.getLevel();
-        info.put("level", wallLevel != null ? wallLevel.getName() : null);
+        info.put("level", levelName(wall.getLevel()));
+        return info;
+    }
+
+    /**
+     * Builds a standard dimension line info map with all display fields:
+     * id, start/end coordinates, offset, auto-calculated length, level.
+     */
+    public static Map<String, Object> buildDimensionLineInfo(DimensionLine dim) {
+        Map<String, Object> info = buildSegmentInfo(dim.getId(),
+                dim.getXStart(), dim.getYStart(), dim.getXEnd(), dim.getYEnd());
+        info.put("offset", round2(dim.getOffset()));
+        info.put("length", round2(dim.getLength()));
+        info.put("level", levelName(dim.getLevel()));
         return info;
     }
 
@@ -134,8 +167,61 @@ public final class FormatUtil {
         }
         info.put("points", pointList);
 
-        Level roomLevel = room.getLevel();
-        info.put("level", roomLevel != null ? roomLevel.getName() : null);
+        info.put("level", levelName(room.getLevel()));
+        return info;
+    }
+
+    /**
+     * Builds a standard 3D environment info map with all display fields:
+     * ground/sky colors and textures, light colors, wall transparency, drawing mode,
+     * all-levels visibility.
+     */
+    public static Map<String, Object> buildEnvironmentInfo(HomeEnvironment env) {
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("groundColor", colorToHex(env.getGroundColor()));
+        info.put("groundTexture", textureName(env.getGroundTexture()));
+        info.put("skyColor", colorToHex(env.getSkyColor()));
+        info.put("skyTexture", textureName(env.getSkyTexture()));
+        info.put("lightColor", colorToHex(env.getLightColor()));
+        info.put("ceilingLightColor", colorToHex(env.getCeillingLightColor()));
+        info.put("wallsAlpha", round2(env.getWallsAlpha()));
+        info.put("drawingMode", env.getDrawingMode().name());
+        info.put("allLevelsVisible", env.isAllLevelsVisible());
+        return info;
+    }
+
+    /**
+     * Builds the label fields shared by every label-reporting command:
+     * id, text, x, y, angle (degrees), color. Callers append their own fields
+     * (level, outlineColor, elevation, pitch, style).
+     */
+    public static Map<String, Object> buildLabelInfo(Label label) {
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("id", label.getId());
+        info.put("text", label.getText());
+        info.put("x", round2(label.getX()));
+        info.put("y", round2(label.getY()));
+        info.put("angle", round2(Math.toDegrees(label.getAngle())));
+        info.put("color", colorToHex(label.getColor()));
+        return info;
+    }
+
+    /**
+     * Builds the level fields shared by every level-reporting command:
+     * id, name, elevation, height, floorThickness.
+     * <p>
+     * The caller supplies the {@code id} it reports, since commands differ:
+     * {@code get_state} and {@code add_level} report the stable {@code HomeObject}
+     * id, while {@code list_levels} reports a positional index. Callers append
+     * their own extra fields (viewable, selected, levelCount).
+     */
+    public static Map<String, Object> buildLevelInfo(Object id, Level level) {
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("id", id);
+        info.put("name", level.getName());
+        info.put("elevation", round2(level.getElevation()));
+        info.put("height", round2(level.getHeight()));
+        info.put("floorThickness", round2(level.getFloorThickness()));
         return info;
     }
 

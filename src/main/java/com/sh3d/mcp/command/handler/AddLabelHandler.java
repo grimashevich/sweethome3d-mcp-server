@@ -17,6 +17,7 @@ import com.sh3d.mcp.command.util.SchemaBuilder;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import com.sh3d.mcp.command.util.FormatUtil;
 
 /**
  * Обработчик команды "add_label".
@@ -130,13 +131,7 @@ public class AddLabelHandler implements CommandHandler, CommandDescriptor {
 
             home.addLabel(label);
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("id", label.getId());
-            result.put("text", label.getText());
-            result.put("x", round2(label.getX()));
-            result.put("y", round2(label.getY()));
-            result.put("angle", round2((float) Math.toDegrees(label.getAngle())));
-            result.put("color", colorToHex(label.getColor()));
+            Map<String, Object> result = FormatUtil.buildLabelInfo(label);
             result.put("outlineColor", colorToHex(label.getOutlineColor()));
             result.put("elevation", round2(label.getElevation()));
             Float lp = label.getPitch();
