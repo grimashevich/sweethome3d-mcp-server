@@ -35,8 +35,8 @@ public class McpRequestHandler implements HttpHandler {
     /** Версия MCP-протокола, поддерживаемая сервером */
     private static final String SUPPORTED_PROTOCOL_VERSION = "2025-03-26";
 
-    /** Maximum allowed request body size (10 MB). Bodies exceeding this limit result in HTTP 413. */
-    static final int MAX_REQUEST_BODY_SIZE = 10 * 1024 * 1024;
+    /** Maximum allowed request body size (5 MB). Bodies exceeding this limit result in HTTP 413. */
+    static final int MAX_REQUEST_BODY_SIZE = 5 * 1024 * 1024;
 
     private final CommandRegistry commandRegistry;
     private final HomeAccessor accessor;

@@ -7,6 +7,9 @@ import com.sh3d.mcp.server.ServerState;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -15,13 +18,41 @@ class HttpMcpServerTest {
 
     private HttpMcpServer server;
 
+    @TempDir
+    Path tempDir;
+
     @BeforeEach
     void setUp() {
         PluginConfig config = mock(PluginConfig.class);
         when(config.getPort()).thenReturn(9877);
+        when(config.getTokenPath()).thenReturn(tempDir.resolve("sh3d-mcp.token"));
         CommandRegistry registry = mock(CommandRegistry.class);
         HomeAccessor accessor = mock(HomeAccessor.class);
         server = new HttpMcpServer(config, registry, accessor);
+    }
+
+    @Test
+    void testTokenStoreLoadedOnConstruction() {
+        assertNotNull(server.getTokenStore());
+    }
+
+    @Test
+    void testStartFailsClosedWithoutToken() throws InterruptedException {
+        PluginConfig config = mock(PluginConfig.class);
+        when(config.getPort()).thenReturn(findFreePort());
+        when(config.getTokenPath()).thenReturn(null);
+        HttpMcpServer noTokenServer = new HttpMcpServer(config,
+                mock(CommandRegistry.class), mock(HomeAccessor.class));
+        assertNull(noTokenServer.getTokenStore());
+
+        noTokenServer.start();
+        for (int i = 0; i < 60 && (noTokenServer.getLastStartupError() == null
+                || noTokenServer.getState() != ServerState.STOPPED); i++) {
+            Thread.sleep(50);
+        }
+
+        assertNotNull(noTokenServer.getLastStartupError());
+        assertEquals(ServerState.STOPPED, noTokenServer.getState());
     }
 
     @Test

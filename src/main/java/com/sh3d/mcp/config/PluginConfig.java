@@ -57,6 +57,14 @@ public class PluginConfig {
         return logLevel;
     }
 
+    /**
+     * Path of the bearer token file. Deliberately not overridable via system property,
+     * so the token never appears on a command line.
+     */
+    public Path getTokenPath() {
+        return resolveTokenPath();
+    }
+
     private static Properties loadPropertiesFile() {
         Properties props = new Properties();
         Path configPath = resolveConfigPath();
@@ -73,6 +81,11 @@ public class PluginConfig {
     static Path resolveConfigPath() {
         Path dir = resolvePluginDir();
         return dir == null ? null : dir.resolve("sh3d-mcp.properties");
+    }
+
+    public static Path resolveTokenPath() {
+        Path dir = resolvePluginDir();
+        return dir == null ? null : dir.resolve("sh3d-mcp.token");
     }
 
     public static Path resolveLogPath() {

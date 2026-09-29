@@ -453,7 +453,7 @@ class McpRequestHandlerTest {
 
     @Test
     void testMaxRequestBodySizeIs10MB() {
-        assertEquals(10 * 1024 * 1024, McpRequestHandler.MAX_REQUEST_BODY_SIZE);
+        assertEquals(5 * 1024 * 1024, McpRequestHandler.MAX_REQUEST_BODY_SIZE);
     }
 
     // === Origin validation ===

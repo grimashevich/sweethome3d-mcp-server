@@ -43,7 +43,10 @@ class McpPluginI18nTest {
         "dialog.clipboard.title", "dialog.clipboard.message",
         "dialog.configure.confirm.title", "dialog.configure.confirm.message",
         "dialog.configure.success.title", "dialog.configure.created.message",
-        "dialog.configure.updated.message", "dialog.configure.error"
+        "dialog.configure.updated.message", "dialog.configure.error",
+        "dialog.token.label", "dialog.button.copyToken", "dialog.button.rotateToken",
+        "dialog.token.copied.message", "dialog.token.rotate.title",
+        "dialog.token.rotate.confirm", "dialog.token.rotate.error"
     };
 
     private static final String[] MESSAGE_FORMAT_KEYS = {
@@ -51,7 +54,8 @@ class McpPluginI18nTest {
         "dialog.error.portInvalid", "dialog.error.startFailed",
         "dialog.update.available.message", "dialog.update.upToDate.message",
         "dialog.configure.created.message",
-        "dialog.configure.updated.message", "dialog.configure.error"
+        "dialog.configure.updated.message", "dialog.configure.error",
+        "dialog.token.rotate.error"
     };
 
     static Stream<Locale> allLocales() {

@@ -55,7 +55,7 @@ it does not exist:
 |----|----------------|
 | Windows | `%APPDATA%\eTeks\Sweet Home 3D\plugins\` |
 | macOS | `~/Library/Application Support/eTeks/Sweet Home 3D/plugins/` |
-| Linux | `~/.sweethome3d/plugins/` |
+| Linux | `~/.eteks/sweethome3d/plugins/` |
 
 **Step 3.** (Re)start Sweet Home 3D. The MCP server starts automatically on port `9877`.
 
@@ -74,38 +74,71 @@ cannot start under that build.
 version" / installer from [sweethome3d.com](https://www.sweethome3d.com/)
 instead of the Mac App Store version.
 
+## Authentication
+
+Every request to `/mcp` must carry `Authorization: Bearer <token>`. On first start the plugin
+generates a random token (32 bytes, base64url) and stores it next to the plugin, readable only by
+you (`0600` where the OS supports it):
+
+| File | Contents |
+|------|----------|
+| `sh3d-mcp.token` | the raw token |
+| `sh3d-mcp.token.headers` | `Authorization: Bearer <token>` (for `mcp-remote --header-file`) |
+
+Both live in the plugins folder listed above. **Tools → MCP Server...** shows the token (masked),
+lets you copy it, and lets you **rotate** it; clients using the old token then get `401`.
+
+The server also rejects (`403`) any request whose `Host` is not `127.0.0.1:<port>` or
+`localhost:<port>`, or that carries an `Origin` other than `http://127.0.0.1:<port>` /
+`http://localhost:<port>` (DNS-rebinding and cross-site protection). No CORS headers are sent.
+Request bodies are limited to 5 MB (`413`).
+
 ## Claude Configuration
 
 Start Sweet Home 3D first: the MCP server exists only while the application is running.
 
-### Claude Code
+### Claude Code (recommended)
 
-Create `.mcp.json` in your project directory:
+Create `.mcp.json` in your project directory. `headersHelper` reads the token file on every
+connect, so the token is never copied into the config and a rotation is picked up automatically
+(macOS path shown; adjust for your OS):
 
 ```json
 {
   "mcpServers": {
     "sweethome3d": {
       "type": "http",
-      "url": "http://localhost:9877/mcp"
+      "url": "http://127.0.0.1:9877/mcp",
+      "headersHelper": "printf '{\"Authorization\":\"Bearer %s\"}' \"$(cat \"$HOME/Library/Application Support/eTeks/Sweet Home 3D/plugins/sh3d-mcp.token\")\""
     }
   }
 }
 ```
 
+Alternatively, with a static header (you must update it after a rotation):
+
+```bash
+claude mcp add --transport http sweethome3d http://127.0.0.1:9877/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
 ### Claude Desktop
 
 Claude Desktop does not load `"type": "http"` entries from `claude_desktop_config.json` — such an entry is ignored.
-It starts MCP servers as local commands, so the plugin is reached through the
+It starts MCP servers as local commands, so the plugin is reached through a pinned
 [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge (requires [Node.js](https://nodejs.org/)).
-Add this to `claude_desktop_config.json`:
+The token is read from the headers file, so it never appears in the config or on the process command line.
+Add this to `claude_desktop_config.json` (macOS path shown):
 
 ```json
 {
   "mcpServers": {
     "sweethome3d": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "http://127.0.0.1:9877/mcp"]
+      "args": [
+        "-y", "mcp-remote@0.14.3", "http://127.0.0.1:9877/mcp",
+        "--header-file", "/Users/<you>/Library/Application Support/eTeks/Sweet Home 3D/plugins/sh3d-mcp.token.headers"
+      ]
     }
   }
 }
@@ -113,9 +146,9 @@ Add this to `claude_desktop_config.json`:
 
 Then quit Claude Desktop completely and start it again.
 
-> The **"Auto-configure Claude Desktop"** button in **Tools → MCP Server...** writes an equivalent entry for you
-> (and keeps a `.bak` copy of the previous config). It uses `localhost` as the host; if Claude Desktop cannot
-> connect, replace it with `127.0.0.1`.
+> The built-in **"Auto-configure Claude Desktop"** button in **Tools → MCP Server...** writes this
+> entry with the correct path (and keeps a `.bak` copy of the previous config). Restart Claude Desktop
+> after rotating the token.
 
 ## Available Commands
 

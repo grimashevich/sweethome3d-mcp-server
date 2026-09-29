@@ -10,10 +10,16 @@ import com.sh3d.mcp.protocol.JsonUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -40,6 +46,10 @@ class HttpMcpE2ETest {
     private HttpClient httpClient;
     private int port;
     private String baseUrl;
+    private String token;
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -47,6 +57,7 @@ class HttpMcpE2ETest {
 
         PluginConfig config = mock(PluginConfig.class);
         when(config.getPort()).thenReturn(port);
+        when(config.getTokenPath()).thenReturn(tempDir.resolve("sh3d-mcp.token"));
 
         Home home = new Home();
         HomeAccessor accessor = new HomeAccessor(home, null);
@@ -65,6 +76,7 @@ class HttpMcpE2ETest {
         assertTrue(server.isRunning(), "Server should be RUNNING on port " + port);
 
         baseUrl = "http://127.0.0.1:" + port + "/mcp";
+        token = server.getTokenStore().current();
 
         httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
@@ -201,6 +213,7 @@ class HttpMcpE2ETest {
         HttpRequest deleteRequest = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + token)
                 .header("Mcp-Session-Id", sessionId)
                 .DELETE()
                 .build();
@@ -262,6 +275,7 @@ class HttpMcpE2ETest {
         HttpRequest deleteRequest = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + token)
                 .DELETE()
                 .build();
 
@@ -308,14 +322,164 @@ class HttpMcpE2ETest {
                 "Error should mention empty body");
     }
 
+    // === Authentication and request validation ===
+
+    private static final String PING = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}";
+
+    @Test
+    void testMissingTokenReturns401() throws Exception {
+        HttpResponse<String> response = httpClient.send(baseRequest(PING).build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(401, response.statusCode());
+        assertEquals("Bearer realm=\"sh3d-mcp\"",
+                response.headers().firstValue("WWW-Authenticate").orElse(null));
+    }
+
+    @Test
+    void testWrongTokenReturns401() throws Exception {
+        String wrong = token.substring(0, token.length() - 1) + (token.endsWith("A") ? "B" : "A");
+        HttpResponse<String> response = httpClient.send(
+                baseRequest(PING).header("Authorization", "Bearer " + wrong).build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(401, response.statusCode());
+    }
+
+    @Test
+    void testNonBearerSchemeReturns401() throws Exception {
+        HttpResponse<String> response = httpClient.send(
+                baseRequest(PING).header("Authorization", "Basic " + token).build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(401, response.statusCode());
+    }
+
+    @Test
+    void testCorrectTokenReturns200() throws Exception {
+        HttpResponse<String> response = post(PING, null);
+
+        assertEquals(200, response.statusCode());
+        assertTrue(response.headers().firstValue("Access-Control-Allow-Origin").isEmpty(),
+                "no CORS headers may be sent");
+    }
+
+    @Test
+    void testRotatedTokenInvalidatesOldToken() throws Exception {
+        String old = token;
+        server.getTokenStore().rotate();
+        token = server.getTokenStore().current();
+
+        HttpResponse<String> stale = httpClient.send(
+                baseRequest(PING).header("Authorization", "Bearer " + old).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, stale.statusCode());
+        assertEquals(200, post(PING, null).statusCode());
+    }
+
+    @Test
+    void testWrongHostReturns403() throws Exception {
+        // java.net.http forbids overriding Host, so send the request over a raw socket
+        String response = rawRequest("POST /mcp HTTP/1.1\r\n"
+                + "Host: evil.example:" + port + "\r\n"
+                + "Authorization: Bearer " + token + "\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Content-Length: " + PING.length() + "\r\n"
+                + "Connection: close\r\n\r\n" + PING);
+
+        assertTrue(response.startsWith("HTTP/1.1 403"), "expected 403, got: " + response);
+    }
+
+    @Test
+    void testLocalhostHostAccepted() throws Exception {
+        String response = rawRequest("POST /mcp HTTP/1.1\r\n"
+                + "Host: localhost:" + port + "\r\n"
+                + "Authorization: Bearer " + token + "\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Content-Length: " + PING.length() + "\r\n"
+                + "Connection: close\r\n\r\n" + PING);
+
+        assertTrue(response.startsWith("HTTP/1.1 200"), "expected 200, got: " + response);
+    }
+
+    @Test
+    void testForeignOriginReturns403() throws Exception {
+        HttpResponse<String> response = httpClient.send(
+                authorized(baseRequest(PING)).header("Origin", "https://evil.example").build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(403, response.statusCode());
+    }
+
+    @Test
+    void testLocalhostOriginOnOtherPortReturns403() throws Exception {
+        HttpResponse<String> response = httpClient.send(
+                authorized(baseRequest(PING)).header("Origin", "http://localhost:3000").build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(403, response.statusCode());
+    }
+
+    @Test
+    void testSameOriginAccepted() throws Exception {
+        HttpResponse<String> response = httpClient.send(
+                authorized(baseRequest(PING)).header("Origin", "http://127.0.0.1:" + port).build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(200, response.statusCode());
+    }
+
+    @Test
+    void testOversizedContentLengthReturns413BeforeBodyIsRead() throws Exception {
+        // Only headers are sent: the guard must reject on Content-Length alone
+        String response = rawRequest("POST /mcp HTTP/1.1\r\n"
+                + "Host: 127.0.0.1:" + port + "\r\n"
+                + "Authorization: Bearer " + token + "\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Content-Length: " + (McpRequestHandler.MAX_REQUEST_BODY_SIZE + 1) + "\r\n"
+                + "Connection: close\r\n\r\n");
+
+        assertTrue(response.startsWith("HTTP/1.1 413"), "expected 413, got: " + response);
+    }
+
+    @Test
+    void testHealthRejectsWrongHost() throws Exception {
+        String response = rawRequest("GET /health HTTP/1.1\r\n"
+                + "Host: evil.example\r\n"
+                + "Connection: close\r\n\r\n");
+
+        assertTrue(response.startsWith("HTTP/1.1 403"), "expected 403, got: " + response);
+    }
+
     // === Helper methods ===
 
-    private HttpResponse<String> post(String body, String sessionId) throws Exception {
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
+    private HttpRequest.Builder baseRequest(String body) {
+        return HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .timeout(Duration.ofSeconds(10));
+    }
+
+    private HttpRequest.Builder authorized(HttpRequest.Builder builder) {
+        return builder.header("Authorization", "Bearer " + token);
+    }
+
+    /** Sends a raw HTTP request and returns only the status line. */
+    private String rawRequest(String request) throws IOException {
+        try (Socket socket = new Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(10_000);
+            socket.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+            String statusLine = reader.readLine();
+            return statusLine == null ? "" : statusLine;
+        }
+    }
+
+    private HttpResponse<String> post(String body, String sessionId) throws Exception {
+        HttpRequest.Builder builder = authorized(baseRequest(body));
 
         if (sessionId != null) {
             builder.header("Mcp-Session-Id", sessionId);

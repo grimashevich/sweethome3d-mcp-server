@@ -2,6 +2,7 @@ package com.sh3d.mcp.http;
 
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.command.CommandRegistry;
+import com.sh3d.mcp.config.AuthTokenStore;
 import com.sh3d.mcp.config.PluginConfig;
 import com.sh3d.mcp.server.ServerState;
 import com.sh3d.mcp.server.ServerStateListener;
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.net.InetSocketAddress;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -53,9 +55,26 @@ public class HttpMcpServer {
     private final AtomicReference<ServerState> state = new AtomicReference<>(ServerState.STOPPED);
     private final List<ServerStateListener> stateListeners = new CopyOnWriteArrayList<>();
 
+    private final Path tokenPath;
+
+    /** Bearer token store; null until successfully loaded. The server never starts without it. */
+    private volatile AuthTokenStore tokenStore;
+
     public HttpMcpServer(PluginConfig config, CommandRegistry commandRegistry, HomeAccessor accessor) {
         this.port = config.getPort();
         this.currentHandler = new McpRequestHandler(commandRegistry, accessor);
+        this.tokenPath = config.getTokenPath();
+        try {
+            this.tokenStore = AuthTokenStore.loadOrCreate(tokenPath);
+        } catch (IOException e) {
+            // Retried on start(); start fails closed if the token is still unavailable
+            LOG.log(Level.WARNING, "Could not load MCP auth token from " + tokenPath, e);
+        }
+    }
+
+    /** Returns the bearer token store, or {@code null} if it could not be loaded. */
+    public AuthTokenStore getTokenStore() {
+        return tokenStore;
     }
 
     /**
@@ -184,11 +203,21 @@ public class HttpMcpServer {
                 return;
             }
 
+            // Fail closed: never serve /mcp without a bearer token
+            AuthTokenStore store = tokenStore;
+            if (store == null) {
+                store = AuthTokenStore.loadOrCreate(tokenPath);
+                tokenStore = store;
+            }
+            AuthTokenStore activeStore = store;
+
             localServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
             localServer.setExecutor(localExecutor);
 
-            localServer.createContext(MCP_ENDPOINT, new DelegatingMcpHandler());
-            localServer.createContext(HEALTH_ENDPOINT, new HealthHandler());
+            localServer.createContext(MCP_ENDPOINT, new DelegatingMcpHandler())
+                    .getFilters().add(new RequestGuard(port, activeStore::current));
+            localServer.createContext(HEALTH_ENDPOINT, new HealthHandler())
+                    .getFilters().add(new RequestGuard(port, null));
 
             localServer.start();
 
