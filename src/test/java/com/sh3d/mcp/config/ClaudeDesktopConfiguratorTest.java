@@ -19,8 +19,8 @@ class ClaudeDesktopConfiguratorTest {
     void testGenerateMcpJsonDefaultPort() {
         String json = ClaudeDesktopConfigurator.generateMcpJson(9877);
         assertTrue(json.contains("\"command\": \"npx\""));
-        assertTrue(json.contains("\"mcp-remote\""));
-        assertTrue(json.contains("http://localhost:9877/mcp"));
+        assertTrue(json.contains("\"" + ClaudeDesktopConfigurator.MCP_REMOTE_PACKAGE + "\""));
+        assertTrue(json.contains("http://127.0.0.1:9877/mcp"));
         assertTrue(json.contains("\"sweethome3d\""));
         assertTrue(json.contains("\"mcpServers\""));
     }
@@ -28,7 +28,20 @@ class ClaudeDesktopConfiguratorTest {
     @Test
     void testGenerateMcpJsonCustomPort() {
         String json = ClaudeDesktopConfigurator.generateMcpJson(8080);
-        assertTrue(json.contains("http://localhost:8080/mcp"));
+        assertTrue(json.contains("http://127.0.0.1:8080/mcp"));
+    }
+
+    @Test
+    void testMcpRemoteIsPinned() {
+        assertTrue(ClaudeDesktopConfigurator.MCP_REMOTE_PACKAGE.matches("mcp-remote@\\d+\\.\\d+\\.\\d+"));
+    }
+
+    @Test
+    void testGenerateMcpJsonPassesTokenViaHeaderFileOnly() {
+        String json = ClaudeDesktopConfigurator.generateMcpJson(9877);
+        assertTrue(json.contains("\"--header-file\""));
+        assertTrue(json.contains("sh3d-mcp.token.headers"));
+        assertFalse(json.contains("Bearer"), "token must never be inlined into the client config");
     }
 
     @Test

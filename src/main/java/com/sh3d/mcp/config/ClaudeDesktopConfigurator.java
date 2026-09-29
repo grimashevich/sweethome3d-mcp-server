@@ -68,11 +68,23 @@ public class ClaudeDesktopConfigurator {
         return JsonUtil.serializePretty(root);
     }
 
+    /**
+     * mcp-remote is pinned: an unpinned {@code npx -y} would fetch whatever is latest on npm at
+     * every Claude Desktop start. The bearer token is passed via {@code --header-file} so it never
+     * appears in claude_desktop_config.json or on the process command line.
+     */
+    static final String MCP_REMOTE_PACKAGE = "mcp-remote@0.14.3";
+
     private static Map<String, Object> buildServerEntry(int port) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("command", "npx");
         List<Object> args = new ArrayList<>(Arrays.asList(
-                "-y", "mcp-remote", "http://localhost:" + port + "/mcp"));
+                "-y", MCP_REMOTE_PACKAGE, "http://127.0.0.1:" + port + "/mcp"));
+        Path tokenPath = PluginConfig.resolveTokenPath();
+        if (tokenPath != null) {
+            args.add("--header-file");
+            args.add(AuthTokenStore.headersPathFor(tokenPath).toString());
+        }
         entry.put("args", args);
         return entry;
     }

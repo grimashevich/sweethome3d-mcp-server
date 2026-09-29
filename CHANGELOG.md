@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal: the response maps for levels, labels, the 3D environment and dimension lines are built in one place (`FormatUtil`) and shared by `get_state`, `list_levels`, `add_level`, `set_selected_level`, `add_label`, `set_environment` and `add_dimension_line`. Apart from the two changes above, responses keep their exact fields, key order and values. The full label response of `add_label` is built there too and shared with `modify_label` and `delete_label`; `add_label`'s response is unchanged.
 - Internal: the response maps for levels, labels, the 3D environment and dimension lines are built in one place (`FormatUtil`) and shared by `get_state`, `list_levels`, `add_level`, `set_selected_level`, `add_label`, `set_environment` and `add_dimension_line`. Apart from the two changes above, responses keep their exact fields, key order and values.
 - `save_home` now also writes the `Home.xml` entry, so saved files can be loaded with `load_home`.
+- **BREAKING: bearer-token authentication.** Every request to `/mcp` now requires `Authorization: Bearer <token>`. A 32-byte random token is generated on first start and stored owner-only (`0600`) as `sh3d-mcp.token` (plus `sh3d-mcp.token.headers` for `mcp-remote --header-file`) in the plugins folder. The server refuses to start if the token cannot be loaded. Missing or wrong token returns `401`; comparison is constant-time.
+- Requests are rejected with `403` unless `Host` is `127.0.0.1:<port>` or `localhost:<port>` (DNS-rebinding protection), and when a present `Origin` is not `http://127.0.0.1:<port>` / `http://localhost:<port>`. Previously any localhost origin on any port was accepted.
+- Request body limit lowered from 10 MB to 5 MB; oversized `Content-Length` is rejected with `413` before the body is read.
+- Auto-configure for Claude Desktop now pins `mcp-remote@0.14.3` (was unpinned `npx -y mcp-remote`), targets `127.0.0.1` instead of `localhost`, and passes the token via `--header-file` so it never appears in `claude_desktop_config.json` or on the command line.
+
+- Token row in **Tools → MCP Server...**: masked display, copy, and rotate.
 
 ### Fixed
 - `add_label` and `modify_label` with a numeric `pitch` now assign Sweet Home 3D's default label style to labels without a style; otherwise Sweet Home 3D doesn't display them in 3D. The response reports that style in `style`.
@@ -40,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Installation: the README now describes installing by double-clicking the `.sh3p` file (Sweet Home 3D imports the plug-in itself and asks for a restart), next to copying it into the plugins folder.
 - Fixed the Claude Desktop configuration in the README: Claude Desktop does not load `"type": "http"` entries, so the documented entry now uses the `mcp-remote` bridge, as the "Auto-configure Claude Desktop" button does. (#7)
+- README: authentication section and client configuration with the bearer token (Claude Code `headersHelper`, Claude Desktop via `mcp-remote --header-file`); corrected the Linux plugins folder to `~/.eteks/sweethome3d/plugins/`.
 - Added a Troubleshooting section documenting the macOS Mac App Store sandbox limitation: that build lacks the `com.apple.security.network.server` entitlement, so the MCP server cannot open its listening port. Use a non-sandboxed Sweet Home 3D build instead. (#2)
 
 ## [1.1.0] - 2026-03-13

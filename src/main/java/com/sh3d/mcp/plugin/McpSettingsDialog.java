@@ -1,5 +1,6 @@
 package com.sh3d.mcp.plugin;
 
+import com.sh3d.mcp.config.AuthTokenStore;
 import com.sh3d.mcp.config.ClaudeDesktopConfigurator;
 import com.sh3d.mcp.http.HttpMcpServer;
 import com.sh3d.mcp.server.ServerState;
@@ -48,6 +49,9 @@ public class McpSettingsDialog extends JDialog {
     private JButton toggleButton;
     private JTextArea jsonArea;
     private JButton configureButton;
+    private JPasswordField tokenField;
+    private JButton copyTokenButton;
+    private JButton rotateTokenButton;
 
     public McpSettingsDialog(Frame owner, HttpMcpServer httpServer, ResourceBundle bundle) {
         super(owner, bundle.getString("dialog.title"), false);
@@ -106,6 +110,14 @@ public class McpSettingsDialog extends JDialog {
         configureButton = new JButton(bundle.getString("dialog.button.autoConfigure"));
         configureButton.setToolTipText(bundle.getString("dialog.button.autoConfigure.tooltip"));
         configureButton.addActionListener(e -> onAutoConfigure());
+
+        tokenField = new JPasswordField(20);
+        tokenField.setEditable(false);
+        copyTokenButton = new JButton(bundle.getString("dialog.button.copyToken"));
+        copyTokenButton.addActionListener(e -> onCopyToken());
+        rotateTokenButton = new JButton(bundle.getString("dialog.button.rotateToken"));
+        rotateTokenButton.addActionListener(e -> onRotateToken());
+        updateTokenField();
     }
 
     private void layoutComponents() {
@@ -143,6 +155,17 @@ public class McpSettingsDialog extends JDialog {
         serverPanel.add(portField, gbc);
         gbc.gridx = 2;
         serverPanel.add(toggleButton, gbc);
+
+        // Token row
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE;
+        serverPanel.add(new JLabel(bundle.getString("dialog.token.label")), gbc);
+        gbc.gridx = 1;
+        serverPanel.add(tokenField, gbc);
+        gbc.gridx = 2;
+        JPanel tokenButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        tokenButtons.add(copyTokenButton);
+        tokenButtons.add(rotateTokenButton);
+        serverPanel.add(tokenButtons, gbc);
 
         content.add(serverPanel, BorderLayout.NORTH);
 
@@ -203,6 +226,7 @@ public class McpSettingsDialog extends JDialog {
                 toggleButton.setText(bundle.getString("dialog.button.stop"));
                 toggleButton.setEnabled(true);
                 portField.setEnabled(false);
+                updateTokenField();
                 break;
             case STOPPED:
                 statusLabel.setText(bundle.getString("dialog.status.stopped"));
@@ -406,6 +430,39 @@ public class McpSettingsDialog extends JDialog {
         } catch (IOException ex) {
             LOG.log(Level.WARNING, "Auto-configure failed", ex);
             showError(MessageFormat.format(bundle.getString("dialog.configure.error"), ex.getMessage()));
+        }
+    }
+
+    private void updateTokenField() {
+        AuthTokenStore store = httpServer.getTokenStore();
+        tokenField.setText(store != null ? store.current() : "");
+        copyTokenButton.setEnabled(store != null);
+        rotateTokenButton.setEnabled(store != null);
+    }
+
+    private void onCopyToken() {
+        AuthTokenStore store = httpServer.getTokenStore();
+        if (store == null) return;
+        Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new StringSelection(store.current()), null);
+        JOptionPane.showMessageDialog(this, bundle.getString("dialog.token.copied.message"),
+                bundle.getString("dialog.clipboard.title"), JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void onRotateToken() {
+        AuthTokenStore store = httpServer.getTokenStore();
+        if (store == null) return;
+        int choice = JOptionPane.showConfirmDialog(this,
+                bundle.getString("dialog.token.rotate.confirm"),
+                bundle.getString("dialog.token.rotate.title"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) return;
+        try {
+            store.rotate();
+            updateTokenField();
+        } catch (IOException ex) {
+            LOG.log(Level.WARNING, "Token rotation failed", ex);
+            showError(MessageFormat.format(bundle.getString("dialog.token.rotate.error"), ex.getMessage()));
         }
     }
 
