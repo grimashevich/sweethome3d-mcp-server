@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- `load_home` no longer deserializes the file's serialized `Home` entry or resolves XML external entities. The file is copied to a private temporary file, must contain exactly one `Home.xml` entry without a DOCTYPE, and is read through Sweet Home 3D's XML reader. Files without `Home.xml` (saved before Sweet Home 3D 5.3, or by earlier versions of this plugin) are refused; open and save them once in Sweet Home 3D.
+
 ### Added
 - `sashPreset` (`single_left`, `single_right`, `double`, `none`) and `sashes` (explicit list of `{xAxis, yAxis, width, startAngle, endAngle}`, angles in degrees) parameters on `place_door_or_window` and `modify_furniture`, so a swing arc can be drawn in the 2D plan for catalog doors and windows that ship without sash data. Presets follow the convention of Sweet Home 3D's own doors: leaves open toward the piece's front and are hinged on the front face of the frame; `mirrored` swaps the hinge side. An invalid preset or sash list, or sashes on a piece that is not a door or window, is rejected before anything changes. `get_state` and furniture results include a `sashes` count for doors and windows, so pieces without a swing arc are easy to find.
 - `modify_dimension_line` — change an existing dimension line's endpoints or offset by ID. Length is always recalculated from the endpoints. A value that is not a finite number, or one that makes the line's length or drawn position overflow, is rejected before anything changes.
@@ -22,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `add_dimension_line` responses gain a `level` field, the same one `get_state` reports for the line.
 - `add_label` reports `angle` rounded the same way as `get_state` (the stored angle to two decimals). The two used to disagree by 0.01° for some angles given with a third decimal of 5, e.g. `5.275` was echoed as `5.28` by `add_label` and reported as `5.27` by `get_state`; both now say `5.27`. Angles with up to two decimals are unaffected.
 - Internal: the response maps for levels, labels, the 3D environment and dimension lines are built in one place (`FormatUtil`) and shared by `get_state`, `list_levels`, `add_level`, `set_selected_level`, `add_label`, `set_environment` and `add_dimension_line`. Apart from the two changes above, responses keep their exact fields, key order and values. The full label response of `add_label` is built there too and shared with `modify_label` and `delete_label`; `add_label`'s response is unchanged.
+- Internal: the response maps for levels, labels, the 3D environment and dimension lines are built in one place (`FormatUtil`) and shared by `get_state`, `list_levels`, `add_level`, `set_selected_level`, `add_label`, `set_environment` and `add_dimension_line`. Apart from the two changes above, responses keep their exact fields, key order and values.
+- `save_home` now also writes the `Home.xml` entry, so saved files can be loaded with `load_home`.
 
 ### Fixed
 - `add_label` and `modify_label` with a numeric `pitch` now assign Sweet Home 3D's default label style to labels without a style; otherwise Sweet Home 3D doesn't display them in 3D. The response reports that style in `style`.
