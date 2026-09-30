@@ -2,7 +2,6 @@ package com.sh3d.mcp.command.handler;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 
-import com.eteks.sweethome3d.io.HomeFileRecorder;
 import com.eteks.sweethome3d.model.Compass;
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomeEnvironment;
@@ -15,6 +14,7 @@ import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.bridge.PathValidator;
+import com.sh3d.mcp.bridge.SafeHomeReader;
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
 import java.io.File;
@@ -61,11 +61,13 @@ public class LoadHomeHandler implements CommandHandler, CommandDescriptor {
             return Response.error("File is not readable: " + normalizedPath);
         }
 
-        // 4. Чтение файла вне EDT
+        // 4. Чтение файла вне EDT (без десериализации и без внешних XML-сущностей)
         Home loaded;
         try {
-            HomeFileRecorder recorder = new HomeFileRecorder();
-            loaded = recorder.readHome(normalizedPath);
+            loaded = SafeHomeReader.read(path);
+        } catch (SafeHomeReader.UnsafeHomeFileException e) {
+            LOG.log(java.util.logging.Level.WARNING, "Load refused", e);
+            return Response.error("Refused to load file: " + e.getMessage());
         } catch (RecorderException e) {
             LOG.log(java.util.logging.Level.WARNING, "Load failed", e);
             return Response.error("Failed to read file: " + e.getMessage());
@@ -229,7 +231,9 @@ public class LoadHomeHandler implements CommandHandler, CommandDescriptor {
     @Override
     public String getDescription() {
         return "Loads a .sh3d file from disk, replacing the current scene with the file contents. "
-                + "This is the inverse of save_home. All current objects (walls, furniture, rooms, "
+                + "This is the inverse of save_home. Only the file's Home.xml entry is read "
+                + "(files saved by Sweet Home 3D 5.3 or later); files without it, or whose XML "
+                + "declares a DOCTYPE, are refused. All current objects (walls, furniture, rooms, "
                 + "labels, dimension lines, levels) are removed and replaced with the contents of "
                 + "the loaded file. Camera positions, environment settings, and stored cameras "
                 + "are also restored. The home name is set to the loaded file path.";

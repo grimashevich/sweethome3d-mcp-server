@@ -152,6 +152,8 @@
                         -XX:+EnableDynamicAgentLoading
                         --add-opens java.base/java.lang=ALL-UNNAMED
                         --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                        <!-- SH3D's temp folder lookup on macOS; only a warning where the package is absent -->
+                        --add-exports java.desktop/com.apple.eio=ALL-UNNAMED
                     </argLine>
                 </configuration>
             </plugin>

@@ -65,7 +65,8 @@ public class SaveHomeHandler implements CommandHandler, CommandDescriptor {
 
         // 5. Записываем файл вне EDT
         try {
-            HomeFileRecorder recorder = new HomeFileRecorder(COMPRESSION_LEVEL, false);
+            // preferXmlEntry=true also writes Home.xml, the only entry load_home accepts
+            HomeFileRecorder recorder = new HomeFileRecorder(COMPRESSION_LEVEL, false, null, false, true);
             recorder.writeHome(clonedHome, normalizedPath);
 
             // 6. Обновляем состояние оригинального Home на EDT
