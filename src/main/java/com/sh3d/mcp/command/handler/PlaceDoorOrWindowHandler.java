@@ -3,6 +3,7 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.CatalogSearchUtil;
+import com.sh3d.mcp.command.util.SashUtil;
 
 import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
@@ -64,6 +65,14 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
         float elevation = hasElevation ? request.getFloat("elevation") : 0f;
         Boolean mirrored = request.getBoolean("mirrored");
 
+        // --- Sashes: проверить до размещения ---
+        final SashUtil.Spec sashSpec;
+        try {
+            sashSpec = SashUtil.parse(params);
+        } catch (IllegalArgumentException e) {
+            return Response.error(e.getMessage());
+        }
+
         // --- Search catalog (only doors/windows) ---
         CatalogSearchUtil.FurnitureSearchResult searchResult =
                 CatalogSearchUtil.findFurniture(
@@ -76,6 +85,11 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             return Response.error("Door/window not found in catalog: " + name);
         }
         CatalogPieceOfFurniture found = searchResult.getFound();
+        if (sashSpec != null && !(found instanceof CatalogDoorOrWindow)) {
+            // Флаг двери без данных двери (CatalogDoorOrWindow): поставить ему створки нельзя
+            return Response.error(SashUtil.NOT_DOOR_OR_WINDOW + ": catalog item '" + found.getName()
+                    + "' has no door/window data");
+        }
         if (mirrored != null && mirrored && !found.isResizable()) {
             // SH3D разрешает зеркалить только растягиваемую мебель (setModelMirrored бросает исключение)
             return Response.error("'" + found.getName() + "' cannot be mirrored: the catalog item is not resizable");
@@ -117,6 +131,9 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             if (mirrored != null && mirrored) {
                 piece.setModelMirrored(true);
             }
+            if (sashSpec != null) {
+                sashSpec.applyTo(piece);
+            }
             if (piece instanceof HomeDoorOrWindow) {
                 // Привязка к стене, как при перетаскивании двери на стену в SH3D: только к прямой.
                 // Последней: setX/setY/setAngle/setDepth у HomeDoorOrWindow её сбрасывают.
@@ -136,7 +153,6 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
         if (data == null) {
             return Response.error("Wall not found: " + wallId);
         }
-
         return Response.ok(data);
     }
 
@@ -251,6 +267,8 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
                         "Position along the wall (along the arc for round walls): 0.0 = start, 0.5 = center, 1.0 = end", 0.5)
                 .number("elevation", "Height above floor in cm. Doors default to 0, windows typically 80-100")
                 .boolWithDefault("mirrored", "Mirror the door/window model (e.g., change hinge side)", false)
+                .enumProp(SashUtil.PARAM_PRESET, SashUtil.presetDescription(), SashUtil.PRESETS)
+                .array(SashUtil.PARAM_SASHES, SashUtil.sashArraySchema())
                 .build();
     }
 

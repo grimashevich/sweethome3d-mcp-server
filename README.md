@@ -144,7 +144,7 @@ Then quit Claude Desktop completely and start it again.
 | `list_categories` | All furniture catalog categories with item counts |
 | `list_furniture_catalog` | Browse catalog; filter by name, category, or type |
 | `place_furniture` | Place a catalog item in the scene |
-| `modify_furniture` | Move, rotate, resize, recolor furniture by ID |
+| `modify_furniture` | Move, rotate, resize, recolor furniture by ID; set door/window swing arcs (`sashPreset` / `sashes`) |
 | `delete_furniture` | Delete furniture by ID |
 | `duplicate_objects` | Duplicate one or more objects by ID |
 | `group_furniture` | Group multiple pieces into one object |
@@ -154,7 +154,7 @@ Then quit Claude Desktop completely and start it again.
 
 | Command | Description |
 |---------|-------------|
-| `place_door_or_window` | Place from catalog into a wall (auto-computes position and angle) |
+| `place_door_or_window` | Place from catalog into a wall (auto-computes position and angle); optional `sashPreset` / `sashes` for the plan's swing arc |
 
 ### Textures & Appearance
 

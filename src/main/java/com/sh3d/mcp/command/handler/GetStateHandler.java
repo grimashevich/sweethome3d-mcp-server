@@ -2,6 +2,7 @@ package com.sh3d.mcp.command.handler;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
+import com.sh3d.mcp.command.util.SashUtil;
 import com.sh3d.mcp.command.util.SceneBounds;
 import com.sh3d.mcp.command.util.SceneBoundsCalculator;
 
@@ -151,6 +152,7 @@ public class GetStateHandler implements CommandHandler, CommandDescriptor {
         item.put("depth", round2(piece.getDepth()));
         item.put("height", round2(piece.getHeight()));
         item.put("isDoorOrWindow", piece.isDoorOrWindow());
+        SashUtil.putCount(item, piece);
         item.put("visible", piece.isVisible());
 
         if (piece instanceof HomeFurnitureGroup) {

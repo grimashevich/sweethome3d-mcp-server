@@ -1,12 +1,17 @@
 package com.sh3d.mcp.command.handler;
 import com.sh3d.mcp.command.util.SceneBoundsCalculator;
 
+import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
+import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
 import com.eteks.sweethome3d.model.DimensionLine;
+import com.eteks.sweethome3d.model.HomeDoorOrWindow;
+import com.eteks.sweethome3d.model.HomeFurnitureGroup;
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.Level;
 import com.eteks.sweethome3d.model.Room;
+import com.eteks.sweethome3d.model.Sash;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
@@ -14,6 +19,7 @@ import com.sh3d.mcp.protocol.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -323,6 +329,46 @@ class GetStateHandlerTest {
     }
 
     // --- Helper ---
+
+    // --- Створки: get_state показывает, у каких дверей и окон их нет ---
+
+    private static HomeDoorOrWindow door(int sashCount) {
+        Sash[] sashes = new Sash[sashCount];
+        Arrays.fill(sashes, new Sash(0f, 1f, 1f, 0f, (float) Math.toRadians(-90)));
+        return new HomeDoorOrWindow(new CatalogDoorOrWindow("test#door", "Door", null, null, null,
+                90f, 20f, 210f, 0f, false, 1f, 0f, sashes, null, null, true, null, null));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testSashCountReportedForDoorsAndWindowsOnly() {
+        home.addPieceOfFurniture(door(0));
+        home.addPieceOfFurniture(door(2));
+        home.addPieceOfFurniture(new HomePieceOfFurniture(
+                new CatalogPieceOfFurniture("Table", null, null, 50f, 50f, 50f, true, false)));
+
+        List<Map<String, Object>> furniture = (List<Map<String, Object>>) execute().getData().get("furniture");
+
+        assertEquals(0, ((Number) furniture.get(0).get("sashes")).intValue());
+        assertEquals(2, ((Number) furniture.get(1).get("sashes")).intValue());
+        assertFalse(furniture.get(2).containsKey("sashes"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testSashCountReportedForDoorInsideGroup() {
+        home.addPieceOfFurniture(new HomeFurnitureGroup(Arrays.asList(door(1), door(0)), "Doors"));
+
+        List<Map<String, Object>> furniture = (List<Map<String, Object>>) execute().getData().get("furniture");
+        List<Map<String, Object>> items = (List<Map<String, Object>>) furniture.get(0).get("groupItems");
+
+        // Группа из одних дверей — isDoorOrWindow(), но своих створок у неё нет и поставить их нельзя
+        assertEquals(true, furniture.get(0).get("isDoorOrWindow"));
+        assertFalse(furniture.get(0).containsKey("sashes"));
+
+        assertEquals(1, ((Number) items.get(0).get("sashes")).intValue());
+        assertEquals(0, ((Number) items.get(1).get("sashes")).intValue());
+    }
 
     private Response execute() {
         return handler.execute(new Request("get_state", Collections.emptyMap()), accessor);

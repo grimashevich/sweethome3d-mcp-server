@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -1085,5 +1086,149 @@ class PlaceDoorOrWindowHandlerTest {
         Map<?, ?> data = (Map<?, ?>) resp.getData();
         assertEquals(d.getDepth(), ((Number) data.get("depth")).floatValue(), EPS);
         assertEquals(d.getY(), ((Number) data.get("y")).floatValue(), EPS);
+    }
+
+    // --- Sash parameters ---
+
+    @Test
+    void testSashPresetOverridesCatalogSashes() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "double");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertTrue(resp.isOk());
+        assertEquals(2, ((Number) resp.getData().get("sashes")).intValue());
+        assertEquals(2, ((HomeDoorOrWindow) home.getFurniture().get(0)).getSashes().length);
+    }
+
+    @Test
+    void testUnknownSashPresetIsRejectedAndNothingPlaced() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "revolving");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertFalse(resp.isOk());
+        assertTrue(home.getFurniture().isEmpty());
+    }
+
+    @Test
+    void testSashCountReportedForPlacedDoor() {
+        Wall wall = addWall(0, 0, 500, 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertEquals(1, ((Number) resp.getData().get("sashes")).intValue());
+    }
+
+    @Test
+    void testInvalidSashListIsRejectedAndNothingPlaced() {
+        Wall wall = addWall(0, 0, 500, 0);
+        Map<String, Object> sash = new LinkedHashMap<>();
+        sash.put("width", 0);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashes", List.of(sash));
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertFalse(resp.isOk());
+        assertTrue(resp.getMessage().contains("sashes[0].width"), resp.getMessage());
+        assertTrue(home.getFurniture().isEmpty());
+    }
+
+    @Test
+    void testSashPresetHingedOnFrameFrontAfterFitInWall() {
+        Wall wall = addWall(0, 0, 500, 0, 20f);
+        frameDoor("Frame Sash Door", 14f, 0.5f, 0.1f, true, true);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Frame Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "single_right");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertTrue(resp.isOk(), () -> String.valueOf(resp.getMessage()));
+        HomeDoorOrWindow d = (HomeDoorOrWindow) home.getFurniture().get(0);
+        Sash s = d.getSashes()[0];
+        // Петля — на лицевой грани коробки, как у дверей каталога SH3D; створка открывается к лицу
+        assertEquals(0.6f, s.getYAxis(), EPS);
+        assertEquals(1f, s.getXAxis(), EPS);
+        assertEquals(1.0, -Math.sin(s.getEndAngle()), EPS);
+        // Дуга — четверть круга: правая створка 180 → 270, а не 180 → −90 (размах 270°)
+        assertEquals(90.0, Math.toDegrees(s.getEndAngle() - s.getStartAngle()), 0.01);
+        assertTrue(d.isBoundToWall(), "sashes must not undo wall binding");
+    }
+
+    @Test
+    void testSashesOnCatalogItemWithoutDoorDataRejectedAndNothingPlaced() {
+        Wall wall = addWall(0, 0, 500, 0);
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Front Door");   // флаг двери, но не CatalogDoorOrWindow
+        params.put("wallId", wall.getId());
+        params.put("sashPreset", "single_left");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertFalse(resp.isOk());
+        assertTrue(resp.getMessage().contains("doors and windows") && resp.getMessage().contains("Front Door"),
+                resp.getMessage());
+        assertTrue(home.getFurniture().isEmpty());
+    }
+
+    @Test
+    void testEmptySashListRemovesCatalogSashes() {
+        Wall wall = addWall(0, 0, 500, 0);
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashes", List.of());
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertTrue(resp.isOk(), () -> String.valueOf(resp.getMessage()));
+        assertEquals(0, ((HomeDoorOrWindow) home.getFurniture().get(0)).getSashes().length);
+        assertEquals(0, ((Number) resp.getData().get("sashes")).intValue());
+    }
+
+    @Test
+    void testUnknownPresetNextToSashListIsRejected() {
+        Wall wall = addWall(0, 0, 500, 0);
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("name", "Sash Door");
+        params.put("wallId", wall.getId());
+        params.put("sashes", List.of());
+        params.put("sashPreset", "bogus");
+
+        Response resp = handler.execute(new Request("place_door_or_window", params), accessor);
+
+        assertFalse(resp.isOk());
+        assertTrue(resp.getMessage().contains("bogus"), resp.getMessage());
+        assertTrue(home.getFurniture().isEmpty());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testSchemaDeclaresSashParameters() {
+        Map<String, Object> props = (Map<String, Object>) handler.getSchema().get("properties");
+        assertEquals(List.of("single_left", "single_right", "double", "none"),
+                ((Map<String, Object>) props.get("sashPreset")).get("enum"));
+        assertEquals("array", ((Map<String, Object>) props.get("sashes")).get("type"));
     }
 }

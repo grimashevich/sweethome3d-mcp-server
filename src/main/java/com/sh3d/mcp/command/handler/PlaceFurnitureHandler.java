@@ -63,7 +63,8 @@ public class PlaceFurnitureHandler implements CommandHandler, CommandDescriptor 
 
         float angleRad = (float) Math.toRadians(angle);
 
-        HomePieceOfFurniture placed = accessor.runOnEDT(() -> {
+        // Ответ строится на EDT: чтение модели — только там (ADR-003)
+        Map<String, Object> data = accessor.runOnEDT(() -> {
             HomePieceOfFurniture piece = (found instanceof CatalogDoorOrWindow)
                     ? new HomeDoorOrWindow((CatalogDoorOrWindow) found)
                     : new HomePieceOfFurniture(found);
@@ -74,10 +75,10 @@ public class PlaceFurnitureHandler implements CommandHandler, CommandDescriptor 
                 piece.setElevation(elevation);
             }
             accessor.getHome().addPieceOfFurniture(piece);
-            return piece;
+            return FormatUtil.buildFurnitureInfo(piece);
         });
 
-        return Response.ok(FormatUtil.buildFurnitureInfo(placed));
+        return Response.ok(data);
     }
 
     @Override
