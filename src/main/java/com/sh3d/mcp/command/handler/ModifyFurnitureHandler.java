@@ -3,6 +3,7 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.ColorParser;
+import com.sh3d.mcp.command.util.SashUtil;
 
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
@@ -28,7 +29,7 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
 
     private static final List<String> MODIFIABLE_KEYS = Arrays.asList(
             "x", "y", "angle", "elevation", "width", "depth", "height",
-            "color", "visible", "mirrored", "name"
+            "color", "visible", "mirrored", "name", SashUtil.PARAM_PRESET, SashUtil.PARAM_SASHES
     );
 
     @Override
@@ -42,13 +43,21 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
         boolean hasModifiable = MODIFIABLE_KEYS.stream().anyMatch(params::containsKey);
         if (!hasModifiable) {
             return Response.error("No modifiable properties provided. "
-                    + "Supported: x, y, angle, elevation, width, depth, height, color, visible, mirrored, name");
+                    + "Supported: x, y, angle, elevation, width, depth, height, color, visible, mirrored, name, sashPreset, sashes");
         }
 
         // Validate color format before EDT
         ColorParser.ColorResult colorResult = ColorParser.parseNullable(params, "color");
         if (colorResult != null && colorResult.hasError()) {
             return Response.error(colorResult.error);
+        }
+
+        // Створки — тоже до EDT: при ошибке изделие не меняется
+        final SashUtil.Spec sashSpec;
+        try {
+            sashSpec = SashUtil.parse(params);
+        } catch (IllegalArgumentException e) {
+            return Response.error(e.getMessage());
         }
 
         final Integer colorToSet = (colorResult != null && !colorResult.clear) ? colorResult.value : null;
@@ -60,6 +69,12 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
 
             if (piece == null) {
                 return null;
+            }
+            String sashError = SashUtil.checkApplicable(sashSpec, piece);
+            if (sashError != null) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("_error", sashError);
+                return err;
             }
 
             // Position
@@ -112,6 +127,11 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
                 }
             }
 
+            // Sashes (door/window swing arcs)
+            if (sashSpec != null) {
+                sashSpec.applyTo(piece);
+            }
+
             // Build response with current state
             Map<String, Object> result = FormatUtil.buildFurnitureInfo(piece);
             result.put("color", colorToHex(piece.getColor()));
@@ -122,6 +142,9 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
 
         if (data == null) {
             return Response.error("Furniture not found: " + id);
+        }
+        if (data.containsKey("_error")) {
+            return Response.error(String.valueOf(data.get("_error")));
         }
 
         return Response.ok(data);
@@ -150,6 +173,8 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
                 .bool("visible", "Whether furniture is visible in the scene")
                 .bool("mirrored", "Whether furniture model is mirrored")
                 .string("name", "New display name for the furniture")
+                .enumProp(SashUtil.PARAM_PRESET, SashUtil.presetDescription(), SashUtil.PRESETS)
+                .array(SashUtil.PARAM_SASHES, SashUtil.sashArraySchema())
                 .build();
     }
 

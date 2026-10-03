@@ -17,6 +17,9 @@ Claude Desktop / Claude Code
 └─────────────────────────────────────┘
 ```
 
+Claude Code connects to this endpoint directly. Claude Desktop needs a small local bridge (`mcp-remote`) in
+between — see [Claude Configuration](#claude-configuration).
+
 ## Screenshots
 
 ![3D scene created via MCP](docs/demo.jpg)
@@ -29,6 +32,7 @@ Claude Desktop / Claude Code
 |-------------|---------|
 | [Sweet Home 3D](https://www.sweethome3d.com/download.jsp) | 6.0 or newer |
 | Java (bundled with SH3D or system) | 11 or newer |
+| [Node.js](https://nodejs.org/) | current LTS — only for Claude Desktop (runs the `mcp-remote` bridge) |
 
 > **Note:** Sweet Home 3D ships with a bundled JRE. Make sure it is Java 11+. Very old SH3D builds (32-bit Windows installer with JRE 1.8) will silently fail to load the plugin due to `UnsupportedClassVersionError`.
 
@@ -72,7 +76,11 @@ instead of the Mac App Store version.
 
 ## Claude Configuration
 
-Add to your Claude Desktop `claude_desktop_config.json`:
+Start Sweet Home 3D first: the MCP server exists only while the application is running.
+
+### Claude Code
+
+Create `.mcp.json` in your project directory:
 
 ```json
 {
@@ -85,20 +93,29 @@ Add to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-For Claude Code, create `.mcp.json` in your project directory:
+### Claude Desktop
+
+Claude Desktop does not load `"type": "http"` entries from `claude_desktop_config.json` — such an entry is ignored.
+It starts MCP servers as local commands, so the plugin is reached through the
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge (requires [Node.js](https://nodejs.org/)).
+Add this to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "sweethome3d": {
-      "type": "http",
-      "url": "http://localhost:9877/mcp"
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:9877/mcp"]
     }
   }
 }
 ```
 
-> The plugin also has a built-in **"Auto-configure Claude Desktop"** button in **Tools → MCP Server...** that writes this config automatically.
+Then quit Claude Desktop completely and start it again.
+
+> The **"Auto-configure Claude Desktop"** button in **Tools → MCP Server...** writes an equivalent entry for you
+> (and keeps a `.bak` copy of the previous config). It uses `localhost` as the host; if Claude Desktop cannot
+> connect, replace it with `127.0.0.1`.
 
 ## Available Commands
 
@@ -136,7 +153,7 @@ For Claude Code, create `.mcp.json` in your project directory:
 | `list_categories` | All furniture catalog categories with item counts |
 | `list_furniture_catalog` | Browse catalog; filter by name, category, or type |
 | `place_furniture` | Place a catalog item in the scene |
-| `modify_furniture` | Move, rotate, resize, recolor furniture by ID |
+| `modify_furniture` | Move, rotate, resize, recolor furniture by ID; set door/window swing arcs (`sashPreset` / `sashes`) |
 | `delete_furniture` | Delete furniture by ID |
 | `duplicate_objects` | Duplicate one or more objects by ID |
 | `group_furniture` | Group multiple pieces into one object |
@@ -146,7 +163,7 @@ For Claude Code, create `.mcp.json` in your project directory:
 
 | Command | Description |
 |---------|-------------|
-| `place_door_or_window` | Place from catalog into a wall (auto-computes position and angle) |
+| `place_door_or_window` | Place from catalog into a wall (auto-computes position and angle); optional `sashPreset` / `sashes` for the plan's swing arc |
 
 ### Textures & Appearance
 

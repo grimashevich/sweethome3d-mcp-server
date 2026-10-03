@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `sashPreset` (`single_left`, `single_right`, `double`, `none`) and `sashes` (explicit list of `{xAxis, yAxis, width, startAngle, endAngle}`, angles in degrees) parameters on `place_door_or_window` and `modify_furniture`, so a swing arc can be drawn in the 2D plan for catalog doors and windows that ship without sash data. Presets follow the convention of Sweet Home 3D's own doors: leaves open toward the piece's front and are hinged on the front face of the frame; `mirrored` swaps the hinge side. An invalid preset or sash list, or sashes on a piece that is not a door or window, is rejected before anything changes. `get_state` and furniture results include a `sashes` count for doors and windows, so pieces without a swing arc are easy to find.
 - `modify_dimension_line` — change an existing dimension line's endpoints or offset by ID. Length is always recalculated from the endpoints.
 - `delete_dimension_line` — remove a dimension line from the 2D plan by ID.
 
@@ -23,10 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `GetStateHandler` routes all six collection builders through one generic `mapAll()` helper
   All command responses keep their exact fields and key order; callers append the fields that differ.
 
+### Fixed
+- `place_door_or_window` and `place_furniture` now create a `HomeDoorOrWindow` when the catalog item is a door or window, instead of a generic `HomePieceOfFurniture` flagged as one. The generic piece lost the catalog's sash definitions (no swing arc in the plan, hinge side not switchable with `mirrored`), the wall cut-out shape and the frame-to-wall metadata, so doors rendered as a narrow leaf floating in an oversized opening. Doors placed with `place_door_or_window` in a straight wall are also bound to it, as the app does on drop.
+- `place_door_or_window` fits the door or window frame into the wall the way Sweet Home 3D does on drop: a stretchable model gets the depth at which its frame is exactly as thick as the wall, and the piece is offset so the frame sits within the wall. The reported `depth` and `x`/`y` change accordingly (e.g. 38.7 cm instead of 20 cm for the default `Door` in a 20 cm wall). The plan footprint now uses the same depth as the 3D model, and a catalog item that cannot be resized no longer fails with "Piece isn't resizable" (asking to mirror such an item now returns a clear error instead of placing nothing).
+- `place_door_or_window` on a round (arc) wall places the piece on the arc itself, with `position` measured along the arc and the piece turned along the tangent; it used to sit on the chord, away from the wall.
+
 ### Tests
 - `FormatUtilTest` now covers the shared response builders directly: `buildDimensionLineInfo`, `buildLabelInfo`, `buildLevelInfo`, `buildEnvironmentInfo`, `levelName`, and the segment prefix in `buildWallInfo`. Each asserts the exact key list *in order*, pinning the field set and field order that the commands' JSON responses depend on.
 
 ### Documentation
+- Fixed the Claude Desktop configuration in the README: Claude Desktop does not load `"type": "http"` entries, so the documented entry now uses the `mcp-remote` bridge, as the "Auto-configure Claude Desktop" button does. (#7)
 - Added a Troubleshooting section documenting the macOS Mac App Store sandbox limitation: that build lacks the `com.apple.security.network.server` entitlement, so the MCP server cannot open its listening port. Use a non-sandboxed Sweet Home 3D build instead. (#2)
 
 ## [1.1.0] - 2026-03-13

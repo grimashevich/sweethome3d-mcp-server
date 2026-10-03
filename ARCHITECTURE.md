@@ -138,6 +138,7 @@ com.sh3d.mcp/
 |   |-- ColorParser.java           # Парсинг цветов (hex, именованные)
 |   |-- CatalogSearchUtil.java     # Поиск по каталогу мебели
 |   |-- CatalogAliases.java        # Алиасы для каталога мебели
+|   |-- SashUtil.java              # Створки дверей/окон (дуги открывания на плане): пресеты и явный список
 |   |-- OverheadCameraComputer.java # Вычисление позиции камеры сверху
 |   |-- SceneBounds.java           # Value object границ сцены
 |   |-- SceneBoundsCalculator.java # Вычисление границ сцены

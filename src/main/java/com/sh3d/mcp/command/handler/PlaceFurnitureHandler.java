@@ -4,7 +4,9 @@ import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.CatalogSearchUtil;
 
+import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
+import com.eteks.sweethome3d.model.HomeDoorOrWindow;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
@@ -61,8 +63,11 @@ public class PlaceFurnitureHandler implements CommandHandler, CommandDescriptor 
 
         float angleRad = (float) Math.toRadians(angle);
 
-        HomePieceOfFurniture placed = accessor.runOnEDT(() -> {
-            HomePieceOfFurniture piece = new HomePieceOfFurniture(found);
+        // Ответ строится на EDT: чтение модели — только там (ADR-003)
+        Map<String, Object> data = accessor.runOnEDT(() -> {
+            HomePieceOfFurniture piece = (found instanceof CatalogDoorOrWindow)
+                    ? new HomeDoorOrWindow((CatalogDoorOrWindow) found)
+                    : new HomePieceOfFurniture(found);
             piece.setX(x);
             piece.setY(y);
             piece.setAngle(angleRad);
@@ -70,10 +75,10 @@ public class PlaceFurnitureHandler implements CommandHandler, CommandDescriptor 
                 piece.setElevation(elevation);
             }
             accessor.getHome().addPieceOfFurniture(piece);
-            return piece;
+            return FormatUtil.buildFurnitureInfo(piece);
         });
 
-        return Response.ok(FormatUtil.buildFurnitureInfo(placed));
+        return Response.ok(data);
     }
 
     @Override
