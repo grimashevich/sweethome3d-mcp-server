@@ -9,13 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `sashPreset` (`single_left`, `single_right`, `double`, `none`) and `sashes` (explicit list of `{xAxis, yAxis, width, startAngle, endAngle}`, angles in degrees) parameters on `place_door_or_window` and `modify_furniture`, so a swing arc can be drawn in the 2D plan for catalog doors and windows that ship without sash data. Presets follow the convention of Sweet Home 3D's own doors: leaves open toward the piece's front and are hinged on the front face of the frame; `mirrored` swaps the hinge side. An invalid preset or sash list, or sashes on a piece that is not a door or window, is rejected before anything changes. `get_state` and furniture results include a `sashes` count for doors and windows, so pieces without a swing arc are easy to find.
+- `modify_dimension_line` — change an existing dimension line's endpoints or offset by ID. Length is always recalculated from the endpoints. A value that is not a finite number, or one that makes the line's length or drawn position overflow, is rejected before anything changes.
+- `delete_dimension_line` — remove a dimension line from the 2D plan by ID.
+
+  Dimension lines could previously only be added.
+
+### Changed
+- `add_dimension_line` responses gain a `level` field, the same one `get_state` reports for the line.
+- `add_label` reports `angle` rounded the same way as `get_state` (the stored angle to two decimals). The two used to disagree by 0.01° for some angles given with a third decimal of 5, e.g. `5.275` was echoed as `5.28` by `add_label` and reported as `5.27` by `get_state`; both now say `5.27`. Angles with up to two decimals are unaffected.
+- Internal: the response maps for levels, labels, the 3D environment and dimension lines are built in one place (`FormatUtil`) and shared by `get_state`, `list_levels`, `add_level`, `set_selected_level`, `add_label`, `set_environment` and `add_dimension_line`. Apart from the two changes above, responses keep their exact fields, key order and values.
 
 ### Fixed
 - `place_door_or_window` and `place_furniture` now create a `HomeDoorOrWindow` when the catalog item is a door or window, instead of a generic `HomePieceOfFurniture` flagged as one. The generic piece lost the catalog's sash definitions (no swing arc in the plan, hinge side not switchable with `mirrored`), the wall cut-out shape and the frame-to-wall metadata, so doors rendered as a narrow leaf floating in an oversized opening. Doors placed with `place_door_or_window` in a straight wall are also bound to it, as the app does on drop.
 - `place_door_or_window` fits the door or window frame into the wall the way Sweet Home 3D does on drop: a stretchable model gets the depth at which its frame is exactly as thick as the wall, and the piece is offset so the frame sits within the wall. The reported `depth` and `x`/`y` change accordingly (e.g. 38.7 cm instead of 20 cm for the default `Door` in a 20 cm wall). The plan footprint now uses the same depth as the 3D model, and a catalog item that cannot be resized no longer fails with "Piece isn't resizable" (asking to mirror such an item now returns a clear error instead of placing nothing).
 - `place_door_or_window` on a round (arc) wall places the piece on the arc itself, with `position` measured along the arc and the piece turned along the tangent; it used to sit on the chord, away from the wall.
+- The `offset` parameter of `add_dimension_line` was documented as "positive = above/left". Sweet Home 3D puts a positive offset on the right-hand side of the line's direction (start → end): below a left-to-right line, left of a top-to-bottom one, since the plan's Y axis points down. The description now says so, and `modify_dimension_line` uses the same wording; behaviour is unchanged.
+- `add_dimension_line` rejects coordinates and offsets that are not finite numbers (e.g. `1e40`, which overflows to infinity), or that are so large that the line's length or drawn position overflows, instead of storing them in the plan.
+- Command responses report finite values beyond about 9.2e16 as they are; they used to come back as `9.223372036854776E16`.
 
 ### Documentation
+- Installation: the README now describes installing by double-clicking the `.sh3p` file (Sweet Home 3D imports the plug-in itself and asks for a restart), next to copying it into the plugins folder.
 - Fixed the Claude Desktop configuration in the README: Claude Desktop does not load `"type": "http"` entries, so the documented entry now uses the `mcp-remote` bridge, as the "Auto-configure Claude Desktop" button does. (#7)
 - Added a Troubleshooting section documenting the macOS Mac App Store sandbox limitation: that build lacks the `com.apple.security.network.server` entitlement, so the MCP server cannot open its listening port. Use a non-sandboxed Sweet Home 3D build instead. (#2)
 

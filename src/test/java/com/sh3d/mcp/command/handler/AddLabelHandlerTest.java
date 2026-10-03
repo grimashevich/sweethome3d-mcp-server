@@ -8,6 +8,8 @@ import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -330,6 +332,37 @@ class AddLabelHandlerTest {
     }
 
     // --- helpers ---
+
+    /**
+     * One label has one angle: add_label reports the value get_state reports for the same label,
+     * i.e. the stored angle (Sweet Home 3D keeps it as float radians in [0, 2*pi)) in degrees,
+     * rounded to two decimals. For 5.275 the stored angle is 5.2749999..., so the answer is 5.27;
+     * rounding after narrowing the degrees to float gave 5.28. Same for 7.985 and 10.245.
+     */
+    @ParameterizedTest
+    @CsvSource({
+            "5.275,  5.27",
+            "7.985,  7.98",
+            "10.245, 10.25",
+            "12.345, 12.35",
+            "30,     30.0",
+            "-90,    270.0",
+            "0,      0.0",
+    })
+    @SuppressWarnings("unchecked")
+    void testAngleInResponseMatchesGetState(double requested, double expected) {
+        Map<String, Object> p = params("Rotated", 100.0, 100.0);
+        p.put("angle", requested);
+
+        Response resp = exec(p);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        Response state = new GetStateHandler().execute(
+                new Request("get_state", new LinkedHashMap<>()), accessor);
+        Map<String, Object> label = ((List<Map<String, Object>>) state.getData().get("labels")).get(0);
+        assertEquals(expected, ((Number) label.get("angle")).doubleValue(), 0.0, "get_state");
+        assertEquals(expected, ((Number) resp.getData().get("angle")).doubleValue(), 0.0, "add_label");
+    }
 
     private Response exec(Map<String, Object> params) {
         return handler.execute(new Request("add_label", params), accessor);

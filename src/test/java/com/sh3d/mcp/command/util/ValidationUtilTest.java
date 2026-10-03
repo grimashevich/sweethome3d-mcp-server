@@ -120,4 +120,78 @@ class ValidationUtilTest {
         assertTrue(error.contains("1.0"), "Error should mention max bound");
         assertTrue(error.contains("5.0"), "Error should mention actual value");
     }
+
+    // ==================== validateFiniteNumbers ====================
+
+    @Test
+    void finite_absentKeysAreSkipped() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("other", "text");
+        assertNull(ValidationUtil.validateFiniteNumbers(params, "x", "y"));
+    }
+
+    @Test
+    void finite_acceptsEveryNumberType() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("a", 1);
+        params.put("b", -2L);
+        params.put("c", 3.5f);
+        params.put("d", 0.0);
+        params.put("e", 3.0e38);   // just inside the float range
+        assertNull(ValidationUtil.validateFiniteNumbers(params, "a", "b", "c", "d", "e"));
+    }
+
+    @Test
+    void finite_rejectsValuesThatOverflowFloat() {
+        for (Object bad : new Object[] {1e40, -1e40, 3.5e38, Double.NaN,
+                Double.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY}) {
+            Map<String, Object> params = new HashMap<>();
+            params.put("x", bad);
+            String error = ValidationUtil.validateFiniteNumbers(params, "x");
+            assertNotNull(error, "must be rejected: " + bad);
+            assertTrue(error.contains("'x'") && error.contains("finite"), error);
+        }
+    }
+
+    @Test
+    void finite_boundaryIsFloatMaxValue() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("max", (double) Float.MAX_VALUE);
+        params.put("min", (double) -Float.MAX_VALUE);
+        assertNull(ValidationUtil.validateFiniteNumbers(params, "max", "min"));
+
+        // the first double that narrows to Infinity rather than to Float.MAX_VALUE
+        params.put("over", 3.4028236e38);
+        assertEquals(Float.POSITIVE_INFINITY, (float) 3.4028236e38, 0f);
+        assertNotNull(ValidationUtil.validateFiniteNumbers(params, "over"));
+    }
+
+    @Test
+    void finite_stringIsShownAsAString() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("x", "50");
+        String error = ValidationUtil.validateFiniteNumbers(params, "x");
+        assertTrue(error.contains("\"50\" (a string)"), error);
+    }
+
+    @Test
+    void finite_rejectsPresentNullAndNonNumbers() {
+        for (Object bad : new Object[] {null, "12", "abc", Boolean.TRUE}) {
+            Map<String, Object> params = new HashMap<>();
+            params.put("x", bad);
+            String error = ValidationUtil.validateFiniteNumbers(params, "x");
+            assertNotNull(error, "must be rejected: " + bad);
+            assertTrue(error.contains("'x'") && error.contains("must be a number"), error);
+        }
+    }
+
+    @Test
+    void finite_reportsTheFirstInvalidKeyInTheGivenOrder() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("a", 1.0);
+        params.put("b", "bad");
+        params.put("c", 1e40);
+        assertTrue(ValidationUtil.validateFiniteNumbers(params, "a", "b", "c").contains("'b'"));
+        assertTrue(ValidationUtil.validateFiniteNumbers(params, "c", "b", "a").contains("'c'"));
+    }
 }

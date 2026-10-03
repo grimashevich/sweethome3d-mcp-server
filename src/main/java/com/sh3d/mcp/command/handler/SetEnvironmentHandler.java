@@ -12,14 +12,11 @@ import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
-import static com.sh3d.mcp.command.util.FormatUtil.colorToHex;
+import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
-import static com.sh3d.mcp.command.util.FormatUtil.round2;
-import static com.sh3d.mcp.command.util.FormatUtil.textureName;
 
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -216,17 +213,7 @@ public class SetEnvironmentHandler implements CommandHandler, CommandDescriptor 
     }
 
     private static Map<String, Object> buildResponse(HomeEnvironment env) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("groundColor", colorToHex(env.getGroundColor()));
-        result.put("groundTexture", textureName(env.getGroundTexture()));
-        result.put("skyColor", colorToHex(env.getSkyColor()));
-        result.put("skyTexture", textureName(env.getSkyTexture()));
-        result.put("lightColor", colorToHex(env.getLightColor()));
-        result.put("ceilingLightColor", colorToHex(env.getCeillingLightColor()));
-        result.put("wallsAlpha", round2(env.getWallsAlpha()));
-        result.put("drawingMode", env.getDrawingMode().name());
-        result.put("allLevelsVisible", env.isAllLevelsVisible());
-        return result;
+        return FormatUtil.buildEnvironmentInfo(env);
     }
 
     // --- Descriptor ---

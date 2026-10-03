@@ -8,7 +8,6 @@ import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
-import static com.sh3d.mcp.command.util.FormatUtil.round2;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
@@ -16,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.sh3d.mcp.command.util.FormatUtil;
 
 /**
  * Обработчик команды "list_levels".
@@ -33,12 +33,7 @@ public class ListLevelsHandler implements CommandHandler, CommandDescriptor {
             List<Object> levelList = new ArrayList<>();
             int index = 0;
             for (Level level : levels) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("id", index);
-                item.put("name", level.getName());
-                item.put("elevation", round2(level.getElevation()));
-                item.put("height", round2(level.getHeight()));
-                item.put("floorThickness", round2(level.getFloorThickness()));
+                Map<String, Object> item = FormatUtil.buildLevelInfo(index, level);
                 item.put("viewable", level.isViewable());
                 item.put("selected", level.equals(selected));
                 levelList.add(item);

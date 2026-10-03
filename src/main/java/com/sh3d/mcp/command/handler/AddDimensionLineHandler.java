@@ -8,10 +8,10 @@ import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
+import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.SchemaBuilder;
+import com.sh3d.mcp.command.util.ValidationUtil;
 
-import static com.sh3d.mcp.command.util.FormatUtil.round2;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -19,6 +19,16 @@ import java.util.Map;
  * Добавляет размерную линию (аннотацию измерения) на 2D-план.
  */
 public class AddDimensionLineHandler implements CommandHandler, CommandDescriptor {
+
+    /**
+     * Сторона, в которую уходит линия при положительном смещении, — общий текст описаний
+     * add_dimension_line и modify_dimension_line. SH3D (DimensionLine.getPoints) сдвигает линию на
+     * (-sin a, cos a) * offset, где a — направление от start к end; ось Y плана направлена вниз,
+     * поэтому на экране это правая сторона по ходу от start к end.
+     */
+    static final String OFFSET_SIDE = "Positive = on the right-hand side when going from start to end "
+            + "(below a left-to-right line, left of a top-to-bottom line; the plan's Y axis points down), "
+            + "negative = on the opposite side";
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
@@ -37,40 +47,51 @@ public class AddDimensionLineHandler implements CommandHandler, CommandDescripto
             return Response.error("Missing required numeric parameters: 'xEnd' and 'yEnd'");
         }
 
-        // Optional: offset (default 25)
-        float parsedOffset = 25.0f;
+        // 1e40 — число, но во float это бесконечность: линия с таким концом ломает план.
+        // offset: отсутствует или null — умолчание 25, иначе то же правило, что у концов
         Object offVal = params.get("offset");
-        if (offVal != null) {
-            if (!(offVal instanceof Number)) {
-                return Response.error("Parameter 'offset' must be a number, got: " + offVal);
-            }
-            parsedOffset = ((Number) offVal).floatValue();
+        String numberError = ValidationUtil.validateFiniteNumbers(params, "xStart", "yStart", "xEnd", "yEnd");
+        if (numberError == null && offVal != null) {
+            numberError = ValidationUtil.validateFiniteNumbers(params, "offset");
         }
+        if (numberError != null) {
+            return Response.error(numberError);
+        }
+        float offset = offVal != null ? ((Number) offVal).floatValue() : 25.0f;
 
-        float xStart = ((Number) xsVal).floatValue();
-        float yStart = ((Number) ysVal).floatValue();
-        float xEnd = ((Number) xeVal).floatValue();
-        float yEnd = ((Number) yeVal).floatValue();
-        final float offset = parsedOffset;
+        // Линия ещё не в Home — проверяем её геометрию до EDT
+        DimensionLine dim = new DimensionLine(((Number) xsVal).floatValue(), ((Number) ysVal).floatValue(),
+                ((Number) xeVal).floatValue(), ((Number) yeVal).floatValue(), offset);
+        String tooLarge = geometryError(dim);
+        if (tooLarge != null) {
+            return Response.error(tooLarge);
+        }
 
         Map<String, Object> data = accessor.runOnEDT(() -> {
             Home home = accessor.getHome();
-
-            DimensionLine dim = new DimensionLine(xStart, yStart, xEnd, yEnd, offset);
             home.addDimensionLine(dim);
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("id", dim.getId());
-            result.put("xStart", round2(dim.getXStart()));
-            result.put("yStart", round2(dim.getYStart()));
-            result.put("xEnd", round2(dim.getXEnd()));
-            result.put("yEnd", round2(dim.getYEnd()));
-            result.put("offset", round2(dim.getOffset()));
-            result.put("length", round2(dim.getLength()));
-            return result;
+            return FormatUtil.buildDimensionLineInfo(dim);
         });
 
         return Response.ok(data);
+    }
+
+    /**
+     * Конечные концы и смещение ещё не значат конечную линию: SH3D считает длину и точки во float,
+     * и квадрат разности концов около 2e19 или сумма координаты со смещением переполняются в
+     * бесконечность. Проверяется то, что SH3D рисует, — длина и точки самой линии.
+     *
+     * @return текст ошибки или {@code null}, если длина и все точки линии конечны
+     */
+    static String geometryError(DimensionLine line) {
+        boolean finite = Float.isFinite(line.getLength());
+        for (float[] point : line.getPoints()) {
+            finite &= Float.isFinite(point[0]) && Float.isFinite(point[1]);
+        }
+        return finite ? null
+                : "Dimension line is too large: its length or drawn position overflows to infinity. "
+                        + "Use coordinates and an offset within the plan's extent";
     }
 
     @Override
@@ -78,8 +99,8 @@ public class AddDimensionLineHandler implements CommandHandler, CommandDescripto
         return "Add a dimension line (measurement annotation) to the 2D plan. "
                 + "Shows the distance between two points with extension lines and an auto-calculated length label. "
                 + "All coordinates in centimeters. "
-                + "Offset controls perpendicular distance of the label from the measured line "
-                + "(positive = above/left, negative = below/right, typical value: 20-50).";
+                + "Offset is the perpendicular distance from the measured segment to the dimension line "
+                + "(typical value: 20-50). " + OFFSET_SIDE + ".";
     }
 
     @Override
@@ -90,8 +111,8 @@ public class AddDimensionLineHandler implements CommandHandler, CommandDescripto
                 .requiredNumber("xEnd", "X coordinate of the end point in centimeters")
                 .requiredNumber("yEnd", "Y coordinate of the end point in centimeters")
                 .numberWithDefault("offset",
-                        "Perpendicular distance (cm) of the dimension label from the measured line. "
-                                + "Positive = above/left, negative = below/right. Typical: 20-50. Default: 25",
+                        "Perpendicular distance (cm) from the measured segment to the dimension line. "
+                                + OFFSET_SIDE + ". Typical: 20-50. Default: 25",
                         25)
                 .build();
     }
