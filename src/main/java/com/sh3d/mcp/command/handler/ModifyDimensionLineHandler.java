@@ -11,8 +11,10 @@ import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.SchemaBuilder;
+import com.sh3d.mcp.command.util.ValidationUtil;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,12 +45,11 @@ public class ModifyDimensionLineHandler implements CommandHandler, CommandDescri
                     + "Supported: xStart, yStart, xEnd, yEnd, offset");
         }
 
-        // Validate types before EDT so callers get a clear message
-        for (String key : MODIFIABLE_KEYS) {
-            if (params.containsKey(key) && !(params.get(key) instanceof Number)) {
-                return Response.error("Parameter '" + key + "' must be a number, got: "
-                        + params.get(key));
-            }
+        // Validate before EDT so callers get a clear message and a bad value changes nothing
+        String numberError = ValidationUtil.validateFiniteNumbers(params,
+                MODIFIABLE_KEYS.toArray(new String[0]));
+        if (numberError != null) {
+            return Response.error(numberError);
         }
 
         Map<String, Object> data = accessor.runOnEDT(() -> {
@@ -59,30 +60,46 @@ public class ModifyDimensionLineHandler implements CommandHandler, CommandDescri
                 return null;
             }
 
-            if (params.containsKey("xStart")) {
-                dim.setXStart(request.getFloat("xStart"));
-            }
-            if (params.containsKey("yStart")) {
-                dim.setYStart(request.getFloat("yStart"));
-            }
-            if (params.containsKey("xEnd")) {
-                dim.setXEnd(request.getFloat("xEnd"));
-            }
-            if (params.containsKey("yEnd")) {
-                dim.setYEnd(request.getFloat("yEnd"));
-            }
-            if (params.containsKey("offset")) {
-                dim.setOffset(request.getFloat("offset"));
+            // Сначала на копии: итоговая линия может переполниться и при конечных значениях
+            DimensionLine changed = dim.clone();
+            apply(changed, request, params);
+            String geometryError = AddDimensionLineHandler.geometryError(changed);
+            if (geometryError != null) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("_error", geometryError);
+                return err;
             }
 
+            apply(dim, request, params);
             return FormatUtil.buildDimensionLineInfo(dim);
         });
 
         if (data == null) {
             return Response.error("Dimension line not found: id '" + id + "'");
         }
+        if (data.containsKey("_error")) {
+            return Response.error(String.valueOf(data.get("_error")));
+        }
 
         return Response.ok(data);
+    }
+
+    private static void apply(DimensionLine dim, Request request, Map<String, Object> params) {
+        if (params.containsKey("xStart")) {
+            dim.setXStart(request.getFloat("xStart"));
+        }
+        if (params.containsKey("yStart")) {
+            dim.setYStart(request.getFloat("yStart"));
+        }
+        if (params.containsKey("xEnd")) {
+            dim.setXEnd(request.getFloat("xEnd"));
+        }
+        if (params.containsKey("yEnd")) {
+            dim.setYEnd(request.getFloat("yEnd"));
+        }
+        if (params.containsKey("offset")) {
+            dim.setOffset(request.getFloat("offset"));
+        }
     }
 
     @Override
@@ -91,9 +108,9 @@ public class ModifyDimensionLineHandler implements CommandHandler, CommandDescri
                 + "Use get_state to find dimension line IDs. "
                 + "Only provided properties are changed; omitted ones remain unchanged. "
                 + "Moving the endpoints changes the measured length, which is always recalculated. "
-                + "Offset is the perpendicular distance of the line from the measured segment "
-                + "(positive = above/left, negative = below/right); "
-                + "use it to shift a dimension outside a room without changing what it measures.";
+                + "Offset is the perpendicular distance from the measured segment to the dimension line; "
+                + "use it to shift a dimension outside a room without changing what it measures. "
+                + AddDimensionLineHandler.OFFSET_SIDE + ".";
     }
 
     @Override
@@ -104,8 +121,8 @@ public class ModifyDimensionLineHandler implements CommandHandler, CommandDescri
                 .number("yStart", "New Y coordinate of the start point in centimeters")
                 .number("xEnd", "New X coordinate of the end point in centimeters")
                 .number("yEnd", "New Y coordinate of the end point in centimeters")
-                .number("offset", "Perpendicular distance (cm) of the dimension line from the "
-                        + "measured segment. Positive = above/left, negative = below/right")
+                .number("offset", "Perpendicular distance (cm) from the measured segment to the "
+                        + "dimension line. " + AddDimensionLineHandler.OFFSET_SIDE)
                 .build();
     }
 

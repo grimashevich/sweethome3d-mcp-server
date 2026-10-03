@@ -23,14 +23,24 @@ public final class FormatUtil {
 
     private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("^#[0-9A-Fa-f]{6}$");
 
+    /** 2^63: from here on Math.round(double) saturates at Long.MAX_VALUE. */
+    private static final double ROUND_LIMIT = 9.223372036854775807E18;
+
     private FormatUtil() {
     }
 
     /**
      * Rounds a double value to 2 decimal places.
+     * A finite value too large for the {@code long} that {@link Math#round(double)} goes through
+     * (about 9.2e16 and beyond) is returned as is: it has no fractional part left to round, and
+     * rounding would silently replace it with {@code Long.MAX_VALUE / 100}.
      */
     public static double round2(double value) {
-        return Math.round(value * 100.0) / 100.0;
+        double scaled = value * 100.0;
+        if (Math.abs(scaled) >= ROUND_LIMIT && Double.isFinite(value)) {
+            return value;
+        }
+        return Math.round(scaled) / 100.0;
     }
 
     /**

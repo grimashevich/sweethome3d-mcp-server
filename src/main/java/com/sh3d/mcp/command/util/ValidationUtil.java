@@ -34,4 +34,31 @@ public final class ValidationUtil {
         }
         return null;
     }
+
+    /**
+     * Validates that specified keys in params, when present, are finite numbers.
+     * Finiteness is checked after narrowing to {@code float}, the type the model stores:
+     * {@code 1e40} is finite as a double but becomes {@code Infinity} as a float.
+     * Absent keys are skipped; a present key with {@code null} or a non-numeric value is an error.
+     *
+     * @param params the parameter map to validate
+     * @param keys   parameter names to check
+     * @return an error message describing the first invalid value, or {@code null} if all valid
+     */
+    public static String validateFiniteNumbers(Map<String, Object> params, String... keys) {
+        for (String key : keys) {
+            if (!params.containsKey(key)) {
+                continue;
+            }
+            Object val = params.get(key);
+            if (!(val instanceof Number)) {
+                return "Parameter '" + key + "' must be a number, got: "
+                        + (val instanceof String ? "\"" + val + "\" (a string)" : val);
+            }
+            if (!Float.isFinite(((Number) val).floatValue())) {
+                return "Parameter '" + key + "' must be a finite number, got: " + val;
+            }
+        }
+        return null;
+    }
 }

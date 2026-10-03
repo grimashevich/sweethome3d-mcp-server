@@ -115,6 +115,28 @@ class FormatUtilTest {
             assertTrue(Double.isFinite(result) || Double.isInfinite(result));
         }
 
+        /**
+         * A finite value keeps its magnitude. Math.round goes through long and saturates at
+         * Long.MAX_VALUE, so 1e17 used to come back as 9.223372036854776E16.
+         */
+        @ParameterizedTest
+        @ValueSource(doubles = {9.223372036854776E16, -9.223372036854776E16, 9.23e16, -9.23e16,
+                1e17, -1e17, 9.3e16, -9.3e16, 1e30, 3.4e38, Double.MAX_VALUE, -Double.MAX_VALUE})
+        void hugeFiniteValueIsReturnedUnchanged(double value) {
+            assertEquals(value, FormatUtil.round2(value), 0.0);
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "9.0e16,            9.0e16",              // just below the limit: still exact
+                "-9.0e16,           -9.0e16",
+                "1234567890123.456, 1234567890123.46",    // large, but with decimals left to round
+                "-1234567890123.456, -1234567890123.46",
+        })
+        void largeValueBelowTheLimitIsStillRounded(double value, double expected) {
+            assertEquals(expected, FormatUtil.round2(value), 0.0);
+        }
+
         @ParameterizedTest
         @CsvSource({
                 "0.005,  0.01",
@@ -370,6 +392,16 @@ class FormatUtilTest {
             assertEquals(Arrays.asList("id", "xStart", "yStart", "xEnd", "yEnd"),
                     keys.subList(0, 5), "segment prefix must come first, in this order");
             assertEquals("level", keys.get(keys.size() - 1));
+        }
+
+        @Test
+        void wallInfoHasExactKeysInOrder() {
+            assertEquals(
+                    Arrays.asList("id", "xStart", "yStart", "xEnd", "yEnd", "thickness", "height",
+                            "heightAtEnd", "length", "arcExtent", "leftSideColor", "rightSideColor",
+                            "topColor", "leftSideShininess", "rightSideShininess", "leftSideTexture",
+                            "rightSideTexture", "level"),
+                    keysOf(FormatUtil.buildWallInfo(new Wall(0, 0, 500, 0, 10, 250))));
         }
 
         @Test

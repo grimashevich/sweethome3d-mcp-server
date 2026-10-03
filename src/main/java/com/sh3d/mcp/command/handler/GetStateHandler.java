@@ -21,7 +21,6 @@ import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
-import static com.sh3d.mcp.command.util.FormatUtil.colorToHex;
 import static com.sh3d.mcp.command.util.FormatUtil.round2;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;

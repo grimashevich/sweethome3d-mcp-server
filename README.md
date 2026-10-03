@@ -119,7 +119,7 @@ Then quit Claude Desktop completely and start it again.
 
 ## Available Commands
 
-44 commands across 12 categories.
+44 commands across 14 categories.
 
 ### Scene
 
@@ -275,7 +275,7 @@ The plugin is a single self-contained component with no external runtime depende
 
 - **`plugin`** — Entry point (`SH3DMcpPlugin`), settings dialog
 - **`http`** — Streamable HTTP MCP server (JSON-RPC 2.0, port 9877)
-- **`command`** — 42 command handlers, auto-registered via `CommandRegistry`
+- **`command`** — 44 command handlers, auto-registered via `CommandRegistry`
 - **`bridge`** — Thread-safe Sweet Home 3D API wrapper (`HomeAccessor` via EDT, `CheckpointManager`, `ObjectResolver`)
 - **`protocol`** — Hand-written JSON parser (zero external dependencies)
 - **`config`** — Plugin settings, Claude Desktop auto-configurator
