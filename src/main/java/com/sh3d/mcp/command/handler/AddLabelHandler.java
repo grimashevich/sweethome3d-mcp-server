@@ -10,12 +10,9 @@ import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
-import static com.sh3d.mcp.command.util.FormatUtil.colorToHex;
-import static com.sh3d.mcp.command.util.FormatUtil.round2;
 import static com.sh3d.mcp.command.util.SchemaUtil.enumProp;
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import com.sh3d.mcp.command.util.FormatUtil;
 
@@ -131,21 +128,7 @@ public class AddLabelHandler implements CommandHandler, CommandDescriptor {
 
             home.addLabel(label);
 
-            Map<String, Object> result = FormatUtil.buildLabelInfo(label);
-            result.put("outlineColor", colorToHex(label.getOutlineColor()));
-            result.put("elevation", round2(label.getElevation()));
-            Float lp = label.getPitch();
-            result.put("pitch", lp != null ? round2((float) Math.toDegrees(lp)) : null);
-            if (label.getStyle() != null) {
-                TextStyle ts = label.getStyle();
-                Map<String, Object> styleMap = new LinkedHashMap<>();
-                styleMap.put("fontSize", ts.getFontSize());
-                styleMap.put("bold", ts.isBold());
-                styleMap.put("italic", ts.isItalic());
-                styleMap.put("alignment", ts.getAlignment().name());
-                result.put("style", styleMap);
-            }
-            return result;
+            return FormatUtil.buildLabelDetails(label);
         });
 
         return Response.ok(data);

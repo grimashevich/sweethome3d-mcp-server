@@ -7,7 +7,9 @@ import com.eteks.sweethome3d.model.Home;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.command.handler.AddDimensionLineHandler;
 import com.sh3d.mcp.command.handler.DeleteDimensionLineHandler;
+import com.sh3d.mcp.command.handler.DeleteLabelHandler;
 import com.sh3d.mcp.command.handler.ModifyDimensionLineHandler;
+import com.sh3d.mcp.command.handler.ModifyLabelHandler;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 import org.junit.jupiter.api.BeforeAll;
@@ -45,6 +47,7 @@ class CommandRegistrationTest {
             "create_walls",
             "delete_dimension_line",
             "delete_furniture",
+            "delete_label",
             "delete_level",
             "delete_room",
             "delete_wall",
@@ -64,6 +67,7 @@ class CommandRegistrationTest {
             "load_home",
             "modify_dimension_line",
             "modify_furniture",
+            "modify_label",
             "modify_room",
             "modify_wall",
             "place_door_or_window",
@@ -129,9 +133,9 @@ class CommandRegistrationTest {
 
     @Test
     void testExactlyTheDocumentedCommandsAreRegistered() {
-        // README and ARCHITECTURE say 44; a command added or dropped must change them together
+        // README and ARCHITECTURE say 46; a command added or dropped must change them together
         assertEquals(new TreeSet<>(EXPECTED_COMMANDS), new TreeSet<>(registry.getHandlers().keySet()));
-        assertEquals(44, registry.getHandlers().size());
+        assertEquals(46, registry.getHandlers().size());
     }
 
     @Test
@@ -178,6 +182,52 @@ class CommandRegistrationTest {
         assertEquals(0, home.getDimensionLines().size());
 
         assertTrue(dispatch(accessor, "delete_dimension_line", "id", id).isError());
+    }
+
+    @Test
+    void testLabelCommandsAreBoundToTheirHandlers() {
+        Map<String, CommandHandler> handlers = registry.getHandlers();
+        assertInstanceOf(ModifyLabelHandler.class, handlers.get("modify_label"));
+        assertInstanceOf(DeleteLabelHandler.class, handlers.get("delete_label"));
+    }
+
+    /** The whole life of a label through the registry, the way a client drives it. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testLabelLifecycleThroughTheRegistry() {
+        Home home = new Home();
+        HomeAccessor accessor = new HomeAccessor(home, null);
+
+        Response added = dispatch(accessor, "add_label", "text", "Kitchen", "x", 100.0, "y", 200.0);
+        assertTrue(added.isOk(), added.getMessage());
+        String id = (String) added.getData().get("id");
+
+        Response modified = dispatch(accessor, "modify_label", "id", id, "text", "Living room", "x", 150.0);
+        assertTrue(modified.isOk(), modified.getMessage());
+        assertEquals("Living room", modified.getData().get("text"));
+
+        Response state = dispatch(accessor, "get_state");
+        List<Map<String, Object>> labels = (List<Map<String, Object>>) state.getData().get("labels");
+        assertEquals(1, labels.size());
+        assertEquals(id, labels.get(0).get("id"));
+        assertEquals("Living room", labels.get(0).get("text"));
+        assertEquals(150.0, ((Number) labels.get(0).get("x")).doubleValue(), 0.0);
+
+        Response batch = dispatch(accessor, "batch_commands", "commands", Arrays.asList(
+                command("modify_label", "id", id, "y", 300.0),
+                command("modify_label", "id", id, "fontSize", 30.0, "bold", true)));
+        assertTrue(batch.isOk(), batch.getMessage());
+        assertEquals(2, ((Number) batch.getData().get("succeeded")).intValue());
+        assertEquals(300f, home.getLabels().iterator().next().getY(), 0f);
+        assertEquals(30f, home.getLabels().iterator().next().getStyle().getFontSize(), 0f);
+        assertTrue(home.getLabels().iterator().next().getStyle().isBold());
+
+        Response deleted = dispatch(accessor, "delete_label", "id", id);
+        assertTrue(deleted.isOk(), deleted.getMessage());
+        assertEquals(id, deleted.getData().get("id"));
+        assertEquals(0, home.getLabels().size());
+
+        assertTrue(dispatch(accessor, "delete_label", "id", id).isError());
     }
 
     private static Response dispatch(HomeAccessor accessor, String action, Object... keyValues) {

@@ -6,6 +6,7 @@ import com.eteks.sweethome3d.model.FurnitureCatalog;
 import com.eteks.sweethome3d.model.FurnitureCategory;
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
+import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.Level;
 import com.eteks.sweethome3d.model.Room;
 import com.eteks.sweethome3d.model.UserPreferences;
@@ -148,6 +149,19 @@ public final class TestFixtures {
         DimensionLine line = new DimensionLine(xStart, yStart, xEnd, yEnd, offset);
         home.addDimensionLine(line);
         return line;
+    }
+
+    // ==================== Label ====================
+
+    /**
+     * Adds a text label to the home (on the selected level, as {@link Home#addLabel} does).
+     *
+     * @return the created Label (already added to home)
+     */
+    public static Label addLabel(Home home, String text, float x, float y) {
+        Label label = new Label(text, x, y);
+        home.addLabel(label);
+        return label;
     }
 
     // ==================== Catalog ====================
