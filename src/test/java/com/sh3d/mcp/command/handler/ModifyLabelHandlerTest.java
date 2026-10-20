@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -165,6 +167,99 @@ class ModifyLabelHandlerTest {
     }
 
     // ---- Text style ----
+
+    @ParameterizedTest
+    @ValueSource(doubles = {90.0, 0.0})
+    void testNumericPitchWithoutStyleUsesPreferencesDefault(double pitch) {
+        TextStyle defaultStyle = new TextStyle("Serif", 27f, true, true, TextStyle.Alignment.LEFT);
+        UserPreferences prefs = mock(UserPreferences.class);
+        when(prefs.getDefaultTextStyle(Label.class)).thenReturn(defaultStyle);
+        accessor = new HomeAccessor(home, prefs);
+        Label label = addLabel(home, "Exit", 100, 200);
+        assertNull(label.getStyle());
+
+        Response resp = exec(label.getId(), "pitch", pitch);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertNotNull(label.getStyle());
+        assertEquals(defaultStyle.getFontSize(), label.getStyle().getFontSize(), 0f);
+        assertEquals(defaultStyle, label.getStyle());
+        assertEquals(Math.toRadians(pitch), label.getPitch(), 1e-5);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> style = (Map<String, Object>) resp.getData().get("style");
+        assertNotNull(style);
+        assertEquals(27f, ((Number) style.get("fontSize")).floatValue(), 0f);
+        assertEquals(true, style.get("bold"));
+        assertEquals(true, style.get("italic"));
+        assertEquals("LEFT", style.get("alignment"));
+    }
+
+    @Test
+    void testNumericPitchWithoutPreferencesUsesFallbackStyle() {
+        Label label = addLabel(home, "Exit", 100, 200);
+
+        Response resp = exec(label.getId(), "pitch", 90);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertEquals(new TextStyle(18f), label.getStyle());
+    }
+
+    @Test
+    void testNumericPitchWithoutPreferencesDefaultUsesFallbackStyle() {
+        accessor = new HomeAccessor(home, mock(UserPreferences.class));
+        Label label = addLabel(home, "Exit", 100, 200);
+
+        Response resp = exec(label.getId(), "pitch", 90);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertEquals(new TextStyle(18f), label.getStyle());
+    }
+
+    @Test
+    void testNullPitchDoesNotCreateStyle() {
+        Label label = addLabel(home, "Exit", 100, 200);
+        label.setPitch((float) (Math.PI / 2));
+
+        Response resp = exec(label.getId(), "pitch", null);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertNull(label.getPitch());
+        assertNull(label.getStyle());
+        assertFalse(resp.getData().containsKey("style"));
+    }
+
+    @Test
+    void testTextChangeOnPitchedLabelDoesNotCreateStyle() {
+        Label label = addLabel(home, "Exit", 100, 200);
+        label.setPitch((float) (Math.PI / 2));
+        Float originalPitch = label.getPitch();
+
+        Response resp = exec(label.getId(), "text", "Entrance");
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertEquals("Entrance", label.getText());
+        assertEquals(originalPitch, label.getPitch());
+        assertNull(label.getStyle());
+        assertFalse(resp.getData().containsKey("style"));
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(doubles = {90.0, 0.0})
+    void testPitchKeepsExistingStyle(Double pitch) {
+        UserPreferences prefs = mock(UserPreferences.class);
+        when(prefs.getDefaultTextStyle(Label.class)).thenReturn(new TextStyle(18f));
+        accessor = new HomeAccessor(home, prefs);
+        Label label = addLabel(home, "Exit", 100, 200);
+        TextStyle ownStyle = new TextStyle("Arial", 24f, true, false, TextStyle.Alignment.RIGHT);
+        label.setStyle(ownStyle);
+        label.setPitch((float) (Math.PI / 2));
+
+        Response resp = exec(label.getId(), "pitch", pitch);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertSame(ownStyle, label.getStyle());
+    }
 
     @Test
     void testFontSizeKeepsTheOtherStyleFields() {

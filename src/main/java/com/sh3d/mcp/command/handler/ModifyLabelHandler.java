@@ -2,6 +2,7 @@ package com.sh3d.mcp.command.handler;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.ColorParser;
+import com.sh3d.mcp.command.util.LabelStyleUtil;
 
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.Label;
@@ -36,9 +37,6 @@ public class ModifyLabelHandler implements CommandHandler, CommandDescriptor {
     );
 
     private static final String[] NUMBER_KEYS = {"x", "y", "angle", "fontSize", "elevation"};
-
-    /** Размер шрифта метки по умолчанию в SH3D (UserPreferences.DEFAULT_TEXT_STYLE). */
-    private static final float DEFAULT_FONT_SIZE = 18f;
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
@@ -176,11 +174,14 @@ public class ModifyLabelHandler implements CommandHandler, CommandDescriptor {
     private static void applyStyle(Label label, Map<String, Object> params, UserPreferences preferences) {
         boolean hasStyle = params.containsKey("fontSize") || params.containsKey("bold")
                 || params.containsKey("italic") || params.containsKey("alignment");
-        if (!hasStyle) {
+        // SH3D displays a label in 3D only if both pitch and style are set.
+        // Only an explicitly supplied numeric pitch requests a style for 3D.
+        boolean hasNumericPitch = params.get("pitch") instanceof Number;
+        if (!hasStyle && !hasNumericPitch) {
             return;
         }
 
-        TextStyle style = label.getStyle() != null ? label.getStyle() : defaultStyle(preferences);
+        TextStyle style = label.getStyle() != null ? label.getStyle() : LabelStyleUtil.defaultStyle(preferences);
         if (params.containsKey("fontSize")) {
             style = style.deriveStyle(floatParam(params, "fontSize"));
         }
@@ -194,12 +195,6 @@ public class ModifyLabelHandler implements CommandHandler, CommandDescriptor {
             style = style.deriveStyle(parseAlignment(params.get("alignment")));
         }
         label.setStyle(style);
-    }
-
-    /** The style Sweet Home 3D draws a label with when the label has none of its own. */
-    private static TextStyle defaultStyle(UserPreferences preferences) {
-        TextStyle style = preferences != null ? preferences.getDefaultTextStyle(Label.class) : null;
-        return style != null ? style : new TextStyle(DEFAULT_FONT_SIZE);
     }
 
     private static float floatParam(Map<String, Object> params, String key) {

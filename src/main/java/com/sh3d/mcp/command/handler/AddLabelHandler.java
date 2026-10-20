@@ -2,6 +2,7 @@ package com.sh3d.mcp.command.handler;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.ColorParser;
+import com.sh3d.mcp.command.util.LabelStyleUtil;
 
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.Label;
@@ -124,6 +125,9 @@ public class AddLabelHandler implements CommandHandler, CommandDescriptor {
 
             if (finalStyle != null) {
                 label.setStyle(finalStyle);
+            } else if (finalPitch != null) {
+                // SH3D requires a text style as well as pitch to display the label in 3D.
+                label.setStyle(LabelStyleUtil.defaultStyle(accessor.getUserPreferences()));
             }
 
             home.addLabel(label);
