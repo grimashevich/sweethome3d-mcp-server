@@ -46,7 +46,8 @@ class McpPluginI18nTest {
         "dialog.configure.updated.message", "dialog.configure.error",
         "dialog.token.label", "dialog.button.copyToken", "dialog.button.rotateToken",
         "dialog.token.copied.message", "dialog.token.rotate.title",
-        "dialog.token.rotate.confirm", "dialog.token.rotate.error"
+        "dialog.token.rotate.confirm", "dialog.token.rotate.error",
+        "dialog.token.require", "dialog.token.require.error"
     };
 
     private static final String[] MESSAGE_FORMAT_KEYS = {
@@ -55,7 +56,7 @@ class McpPluginI18nTest {
         "dialog.update.available.message", "dialog.update.upToDate.message",
         "dialog.configure.created.message",
         "dialog.configure.updated.message", "dialog.configure.error",
-        "dialog.token.rotate.error"
+        "dialog.token.rotate.error", "dialog.token.require.error"
     };
 
     static Stream<Locale> allLocales() {

@@ -2,15 +2,20 @@ package com.sh3d.mcp.config;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Set;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -22,7 +27,7 @@ import java.util.regex.Pattern;
  * (43 characters). It is persisted in a token file (raw token) and a sibling headers file
  * ({@code Authorization: Bearer <token>}, the format read by {@code mcp-remote --header-file}).
  * Both files are written atomically with owner-only permissions (0600) where the file system
- * supports POSIX permissions. The token value is never logged.
+ * supports POSIX permissions, or an owner-only ACL on Windows. The token value is never logged.
  */
 public final class AuthTokenStore {
 
@@ -80,8 +85,19 @@ public final class AuthTokenStore {
      */
     public synchronized void rotate() throws IOException {
         String newToken = generateToken();
-        writeOwnerOnly(tokenPath, newToken + "\n");
-        writeHeadersFile(newToken);
+        try {
+            writeOwnerOnly(tokenPath, newToken + "\n");
+            writeHeadersFile(newToken);
+        } catch (IOException e) {
+            if (token != null) {
+                try {
+                    writeOwnerOnly(tokenPath, token + "\n");
+                } catch (IOException rollbackError) {
+                    e.addSuppressed(rollbackError);
+                }
+            }
+            throw e;
+        }
         token = newToken;
         LOG.info("MCP auth token written to " + tokenPath);
     }
@@ -116,10 +132,13 @@ public final class AuthTokenStore {
     private static void writeOwnerOnly(Path target, String content) throws IOException {
         Path dir = target.toAbsolutePath().getParent();
         Files.createDirectories(dir);
-        Path tmp = isPosix()
+        Path tmp = isPosix(dir)
                 ? Files.createTempFile(dir, ".sh3d-mcp", ".tmp", ownerOnlyAttribute())
                 : Files.createTempFile(dir, ".sh3d-mcp", ".tmp");
         try {
+            // On ACL file systems an empty temporary file may inherit permissions. Replace
+            // its ACL before writing any secret, and abort the write if this fails.
+            restrictPermissions(tmp);
             Files.write(tmp, content.getBytes(StandardCharsets.US_ASCII));
             Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } finally {
@@ -128,19 +147,32 @@ public final class AuthTokenStore {
     }
 
     private static void restrictPermissions(Path path) throws IOException {
-        if (!isPosix()) {
-            return;
-        }
-        Set<PosixFilePermission> perms = Files.getPosixFilePermissions(path);
-        if (!OWNER_ONLY.containsAll(perms)) {
-            LOG.warning("Token file " + path + " had permissions "
-                    + PosixFilePermissions.toString(perms) + "; restricting to rw-------");
-            Files.setPosixFilePermissions(path, OWNER_ONLY);
+        if (isPosix(path)) {
+            Set<PosixFilePermission> perms = Files.getPosixFilePermissions(path);
+            if (!OWNER_ONLY.containsAll(perms)) {
+                LOG.warning("Token file " + path + " had permissions "
+                        + PosixFilePermissions.toString(perms) + "; restricting to rw-------");
+                Files.setPosixFilePermissions(path, OWNER_ONLY);
+            }
+        } else {
+            AclFileAttributeView acl = Files.getFileAttributeView(path, AclFileAttributeView.class);
+            if (acl != null) {
+                AclEntry ownerAccess = AclEntry.newBuilder()
+                        .setType(AclEntryType.ALLOW)
+                        .setPrincipal(acl.getOwner())
+                        .setPermissions(EnumSet.allOf(AclEntryPermission.class))
+                        .build();
+                // An explicit list replaces inherited entries; no inheritance flags are set.
+                acl.setAcl(Collections.singletonList(ownerAccess));
+            } else {
+                LOG.warning("File system supports neither POSIX permissions nor ACLs; "
+                        + "cannot restrict access to token file " + path);
+            }
         }
     }
 
-    private static boolean isPosix() {
-        return FileSystems.getDefault().supportedFileAttributeViews().contains("posix");
+    private static boolean isPosix(Path path) {
+        return path.getFileSystem().supportedFileAttributeViews().contains("posix");
     }
 
     private static FileAttribute<Set<PosixFilePermission>> ownerOnlyAttribute() {

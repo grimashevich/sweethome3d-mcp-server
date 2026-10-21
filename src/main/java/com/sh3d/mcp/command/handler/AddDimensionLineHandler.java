@@ -33,6 +33,11 @@ public class AddDimensionLineHandler implements CommandHandler, CommandDescripto
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
         Map<String, Object> params = request.getParams();
+        String finiteError = ValidationUtil.validateFiniteInputs(params,
+                "xStart", "yStart", "xEnd", "yEnd", "offset");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
 
         // Required: xStart, yStart, xEnd, yEnd
         Object xsVal = params.get("xStart");
@@ -85,6 +90,10 @@ public class AddDimensionLineHandler implements CommandHandler, CommandDescripto
      * @return текст ошибки или {@code null}, если длина и все точки линии конечны
      */
     static String geometryError(DimensionLine line) {
+        if (line.getXStart() == line.getXEnd() && line.getYStart() == line.getYEnd()
+                && line.getElevationStart() == line.getElevationEnd()) {
+            return "Dimension line has zero length: start and end points are identical";
+        }
         boolean finite = Float.isFinite(line.getLength());
         for (float[] point : line.getPoints()) {
             finite &= Float.isFinite(point[0]) && Float.isFinite(point[1]);

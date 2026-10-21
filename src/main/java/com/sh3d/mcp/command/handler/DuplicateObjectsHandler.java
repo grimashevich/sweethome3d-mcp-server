@@ -13,6 +13,7 @@ import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.bridge.ObjectResolver;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import static com.sh3d.mcp.command.util.FormatUtil.round2;
@@ -36,6 +37,12 @@ public class DuplicateObjectsHandler implements CommandHandler, CommandDescripto
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "offsetX", "offsetY");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         // Parse ids
         Object idsRaw = request.getParams().get("ids");
         request.markAccessed("ids");

@@ -15,6 +15,9 @@
 
 ---
 
+Версия плагина: **1.2.0**. Поддерживаемая среда — Sweet Home 3D 7.x (проверено 7.5),
+Java 8 или новее, включая встроенную Java 8. Сборка и тесты требуют JDK 11+ и Maven 3.9+.
+
 ## 1. Высокоуровневая архитектура
 
 ### 1.1 Контекстная диаграмма
@@ -104,69 +107,75 @@ Claude (HTTP клиент)          Плагин
 
 ### 2.1 Иерархия пакетов
 
-```
+```text
 com.sh3d.mcp/
-|
-|-- plugin/                         # Точка входа плагина и SH3D-интеграция
-|   |-- SH3DMcpPlugin.java         # extends Plugin, точка входа
-|   |-- McpSettingsAction.java      # PluginAction — открывает McpSettingsDialog (настройки MCP-сервера)
-|   |-- McpSettingsDialog.java     # Swing-диалог настроек: статус, порт, autoStart, Claude Desktop конфиг
-|
-|-- http/                           # HTTP MCP-сервер (Streamable HTTP)
-|   |-- HttpMcpServer.java         # com.sun.net.httpserver.HttpServer, lifecycle
-|   |-- McpRequestHandler.java     # HttpHandler для /mcp endpoint
-|   |-- JsonRpcProtocol.java       # JSON-RPC 2.0 парсинг/форматирование
-|   |-- McpSession.java            # Value object MCP-сессии
-|   |-- SessionManager.java        # Управление сессиями (ConcurrentHashMap, TTL)
-|
-|-- server/                         # Состояние сервера (переиспользуется из HTTP)
-|   |-- ServerState.java           # Enum: STOPPED, STARTING, RUNNING, STOPPING
-|   |-- ServerStateListener.java   # Functional interface для подписки на смену состояния
-|
-|-- protocol/                       # JSON-утилиты и value objects
-|   |-- JsonUtil.java              # Recursive descent JSON-парсер/сериализатор
-|   |-- Request.java               # Value object: action + params
-|   |-- Response.java              # Value object: status + data/message
-|
-|-- command/                        # Обработчики команд (46 handler-классов + утилиты)
-|   |-- CommandHandler.java        # Интерфейс обработчика
-|   |-- CommandDescriptor.java     # Интерфейс auto-discovery (description + schema)
-|   |-- CommandRegistry.java       # Реестр action -> handler
-|   |-- ValidationUtil.java        # Общие валидации параметров (извлечено из handler'ов)
-|   |-- FormatUtil.java            # Форматирование данных (buildFurnitureInfo и др.)
-|   |-- SchemaUtil.java            # Утилиты для построения JSON Schema
-|   |-- ColorParser.java           # Парсинг цветов (hex, именованные)
-|   |-- CatalogSearchUtil.java     # Поиск по каталогу мебели
-|   |-- CatalogAliases.java        # Алиасы для каталога мебели
-|   |-- SashUtil.java              # Створки дверей/окон (дуги открывания на плане): пресеты и явный список
-|   |-- OverheadCameraComputer.java # Вычисление позиции камеры сверху
-|   |-- SceneBounds.java           # Value object границ сцены
-|   |-- SceneBoundsCalculator.java # Вычисление границ сцены
-|   |-- BatchCommandsHandler.java
-|   |-- CreateWallsHandler.java
-|   |-- PlaceFurnitureHandler.java
-|   |-- GetStateHandler.java
-|   |-- RenderPhotoHandler.java
-|   |-- GenerateShapeHandler.java  # Произвольные 3D-фигуры (делегирует в *ShapeGenerator)
-|   |-- DuplicateObjectsHandler.java # Дублирование объектов
-|   |-- GroupFurnitureHandler.java # Группировка мебели
-|   |-- UngroupFurnitureHandler.java # Разгруппировка мебели
-|   |-- ... (ещё ~30 handler-классов)
-|   |-- *ShapeGenerator.java       # Генераторы форм: Arch, Box, Cone, Cylinder, Extrude,
-|   |                              #   Hemisphere, Mesh, Pipe, Sphere, Stairs, Torus, Wedge
-|   |-- ShapeGeneratorSupport.java # Базовый класс для генераторов форм
-|   |-- Csg*.java                  # CSG-операции: CsgNode, CsgOperation, CsgPlane, CsgPolygon, CsgVertex
-|
-|-- bridge/                         # Мост к Sweet Home 3D API
-|   |-- HomeAccessor.java          # Thread-safe обертка над Home через EDT
-|   |-- CheckpointManager.java     # In-memory undo/redo (Home.clone())
-|   |-- ObjectResolver.java        # Поиск объектов Home по стабильному строковому ID (HomeObject.getId())
-|   |-- CommandException.java      # Unchecked exception для ошибок EDT
-|   |-- PathValidator.java         # Валидация и нормализация файловых путей (path traversal protection)
-|
-|-- config/                         # Конфигурация
-    |-- PluginConfig.java          # Настраиваемые параметры
-    |-- ClaudeDesktopConfigurator.java  # Автоконфигурация Claude Desktop (мерж MCP-секции в claude_desktop_config.json)
+├── plugin/                         # Точка входа и интерфейс настроек
+│   ├── SH3DMcpPlugin.java          # Жизненный цикл, общий HTTP-сервер, реестр команд
+│   ├── McpSettingsAction.java      # Пункт меню Tools → MCP Server...
+│   └── McpSettingsDialog.java      # Статус, порт, токен, настройка клиента
+├── http/                           # Streamable HTTP и JSON-RPC 2.0
+│   ├── HttpMcpServer.java          # Сервер на 127.0.0.1, /mcp и /health
+│   ├── RequestGuard.java           # Фильтр Host/Origin, токена и размера запроса
+│   ├── McpRequestHandler.java      # Диспетчеризация MCP-запросов
+│   ├── JsonRpcProtocol.java        # Парсинг и форматирование JSON-RPC
+│   ├── McpSession.java             # Состояние сессии
+│   └── SessionManager.java         # Хранение сессий и TTL
+├── server/
+│   ├── ServerState.java            # Состояния жизненного цикла
+│   └── ServerStateListener.java    # Подписка на смену состояния
+├── protocol/
+│   ├── JsonUtil.java               # JSON без внешних зависимостей
+│   ├── Request.java                # action + params, учёт прочитанных параметров
+│   └── Response.java               # status + data/message
+├── command/
+│   ├── CommandHandler.java         # Интерфейс обработчика
+│   ├── CommandDescriptor.java      # Описание и JSON Schema для tools/list
+│   ├── CommandRegistry.java        # Реестр action → handler
+│   ├── handler/                    # 46 обработчиков команд
+│   │   ├── GetStateHandler.java
+│   │   ├── GenerateShapeHandler.java
+│   │   ├── ModifyLabelHandler.java
+│   │   ├── DeleteLabelHandler.java
+│   │   └── ...
+│   ├── shape/                      # Генераторы примитивов, extrude и mesh
+│   │   ├── ShapeGenerator.java
+│   │   ├── ShapeGeneratorSupport.java
+│   │   ├── ShapeCommonParams.java
+│   │   ├── BoxShapeGenerator.java  # И другие *ShapeGenerator
+│   │   └── csg/                    # Булевы операции над геометрией
+│   │       ├── CsgNode.java
+│   │       ├── CsgOperation.java
+│   │       ├── CsgPlane.java
+│   │       ├── CsgPolygon.java
+│   │       ├── CsgVertex.java
+│   │       ├── CsgShapeGenerator.java
+│   │       └── CsgTimeoutException.java
+│   └── util/                       # Общая валидация, форматирование и геометрия
+│       ├── ValidationUtil.java
+│       ├── FormatUtil.java
+│       ├── SchemaBuilder.java
+│       ├── SchemaUtil.java
+│       ├── ColorParser.java
+│       ├── CatalogSearchUtil.java
+│       ├── CatalogAliases.java
+│       ├── HomeFurnitureFactory.java
+│       ├── LabelStyleUtil.java
+│       ├── SashUtil.java
+│       ├── OverheadCameraComputer.java
+│       ├── SceneBounds.java
+│       └── SceneBoundsCalculator.java
+├── bridge/                         # Доступ к Sweet Home 3D API
+│   ├── HomeAccessor.java           # Синхронный доступ к модели через EDT
+│   ├── CheckpointManager.java      # Снимки, стабильные номера, курсор истории
+│   ├── ObjectResolver.java         # Поиск объектов по стабильному строковому ID
+│   ├── CommandException.java       # Ошибки выполнения задач в EDT
+│   ├── PathValidator.java          # Пути и расширения файлов
+│   ├── HomeCleaner.java            # Очистка сцены
+│   └── SafeHomeReader.java         # Проверка и чтение Home.xml без десериализации
+└── config/
+    ├── PluginConfig.java           # Настройки и версия плагина
+    ├── AuthTokenStore.java         # Создание, хранение и ротация токена
+    └── ClaudeDesktopConfigurator.java # Конфигурация локального stdio-моста
 ```
 
 ### 2.2 Описание ключевых классов
@@ -177,7 +186,7 @@ com.sh3d.mcp/
 - Главный класс плагина, указывается в `ApplicationPlugin.properties`
 - `getActions()` -- создаёт `HomeAccessor`, `CommandRegistry` (46 команд), `HttpMcpServer`
 - При `autoStart=true` запускает HTTP-сервер сразу
-- `destroy()` -- останавливает HTTP-сервер при закрытии Home
+- `destroy()` -- переключает сервер на оставшийся Home; при закрытии последнего Home останавливает сервер
 
 **`McpSettingsAction extends PluginAction`**
 - Пункт меню "MCP Server..." (в меню Tools)
@@ -186,7 +195,7 @@ com.sh3d.mcp/
 
 **`McpSettingsDialog extends JDialog`**
 - Swing-диалог настроек MCP-сервера
-- Показывает текущий статус (RUNNING/STOPPED), порт, autoStart
+- Показывает текущий статус (RUNNING/STOPPED), порт, autoStart и режим токена
 - Кнопки Start/Stop для управления сервером
 - Интеграция с `ClaudeDesktopConfigurator` для автоконфигурации Claude Desktop
 
@@ -196,11 +205,11 @@ com.sh3d.mcp/
 - Управляет `com.sun.net.httpserver.HttpServer` на `127.0.0.1:port`
 - `ThreadPoolExecutor` (core=4, max=16, `SynchronousQueue`) с daemon-потоками для обработки запросов
 - Жизненный цикл: STOPPED → STARTING → RUNNING → STOPPING → STOPPED
-- Один endpoint: `/mcp`
+- Endpoints: `/mcp` (MCP) и `/health` (проверка состояния)
 
 **`McpRequestHandler implements HttpHandler`**
 - Обрабатывает POST (JSON-RPC 2.0), GET (SSE -- не реализовано), DELETE (cleanup)
-- DNS rebinding protection через валидацию Origin заголовка
+- Запросы проходят через `RequestGuard` до обработчика
 - `tools/list` -- собирает tools из `CommandDescriptor` через `CommandRegistry`
 - `tools/call` -- диспетчеризация через `CommandRegistry.dispatch()`
 
@@ -238,7 +247,12 @@ void onStateChanged(ServerState oldState, ServerState newState);
 
 **`Request`** (value object)
 - `action: String`, `params: Map<String, Object>`
-- Методы: `getString(key)`, `getFloat(key)`, `getFloat(key, default)`, `getInt(key, default)`, `getBoolean(key, default)`
+- `getAction()` возвращает имя команды, `getParams()` — представление параметров с учётом обращений к ключам
+- `getString(key)` возвращает строковое представление значения или `null`; `getRequiredString(key)` требует наличия значения, но не проверяет пустую строку
+- `getFloat(key)` требует параметр, `getFloat(key, defaultValue)` использует значение по умолчанию при отсутствии
+- `getBoolean(key)` возвращает `Boolean` или `null`, а для значения другого типа бросает `IllegalArgumentException`
+- `getUnrecognizedKeys()` возвращает переданные, но не прочитанные ключи; `markAccessed(key)` отмечает ключ прочитанным явно
+- Проверки диапазона, конечности чисел и непустых строк выполняют обработчики
 
 **`Response`** (value object)
 - Статические фабрики: `Response.ok(data)`, `Response.error(message)`
@@ -254,12 +268,14 @@ void onStateChanged(ServerState oldState, ServerState newState);
 **`CheckpointManager`**
 - In-memory undo/redo через `Home.clone()`
 - Таймлайн с курсором, fork при новом checkpoint после restore
-- `maxDepth=32`, ~50-200 KB на снимок
+- Снимок неизменен: при восстановлении в сцену уходит его копия (`LoadHomeHandler.replaceScene()` — общий код `restore_checkpoint` и `load_home`), поэтому правки сцены после восстановления снимок не затрагивают
+- `maxDepth=32`; при нехватке памяти старые снимки удаляются
+- Номера снимков растут в течение жизни менеджера и не переиспользуются после удаления, ветвления или очистки истории; `cursor` и `restoredTo` используют эти номера
 
 **`ObjectResolver`**
 - Статический utility-класс для поиска объектов Home по стабильному строковому ID
 - Использует `HomeObject.getId()` (SH3D 7.x) — ID автогенерируется, стабилен при удалении других объектов, сохраняется при сериализации и клонировании
-- Методы: `findWall()`, `findFurniture()`, `findRoom()`, `findLevel()`, `findDimensionLine()`
+- Методы: `findWall()`, `findFurniture()`, `findRoom()`, `findLevel()`, `findDimensionLine()`, `findLabel()`, `findPolyline()`, `findSelectable()`
 - Используется handler-классами для операций modify/delete/connect по ID объекта
 
 **`CommandException`**
@@ -339,7 +355,7 @@ void onStateChanged(ServerState oldState, ServerState newState);
 
 Триггеры остановки:
 - Пользователь нажал "Stop" в диалоге настроек (McpSettingsDialog)
-- Вызван `Plugin.destroy()` (закрытие Home)
+- Вызван `Plugin.destroy()` при закрытии последнего Home
 - JVM завершается (daemon-потоки умирают автоматически)
 
 ### 3.3 Протокол: MCP Streamable HTTP
@@ -389,9 +405,25 @@ void onStateChanged(ServerState oldState, ServerState newState);
 - `DELETE /mcp` удаляет сессию
 - TTL сессий: 30 минут, lazy cleanup
 
-#### Безопасность
-- Привязка к `127.0.0.1` (только localhost)
-- DNS rebinding protection: валидация `Origin` header (допускаются только localhost origins)
+#### Безопасность HTTP
+
+`RequestGuard` — фильтр перед `/mcp` и `/health`. Сервер слушает только `127.0.0.1`;
+`Host` и переданный `Origin` всегда проверяются на loopback-адрес и порт сервера,
+повторы заголовков и списки значений отклоняются с `403`. CORS-заголовки не отправляются.
+Лимит тела запроса — 5 МБ (`413` при превышении).
+
+Токен по умолчанию выключен. Галочка **Require a token** в **Tools → MCP Server...**
+включает проверку `Authorization: Bearer <token>` для `/mcp` со следующего запроса,
+в том числе в существующих сессиях; `/health` токена не требует.
+`AuthTokenStore` хранит токен и файл заголовка в папке плагинов с правами только владельца.
+При включённой проверке отсутствие или неверное значение токена даёт `401`,
+а невозможность получить обязательный токен не позволяет запустить сервер.
+Без токена любая локальная программа может управлять сценой и записывать файлы с правами SH3D.
+
+`load_home` использует `SafeHomeReader`: приватная временная копия, ровно один `Home.xml`,
+запрет DOCTYPE, XXE и внешнего содержимого, лимит распакованного XML 64 МБ.
+Java-десериализация записи `Home` не выполняется. Старые файлы без `Home.xml`
+нужно открыть и пересохранить в Sweet Home 3D.
 
 ### 3.4 Graceful Shutdown
 
@@ -424,7 +456,7 @@ CommandRegistry (46 команд)
   |-- "generate_shape"          --> GenerateShapeHandler
   |-- "duplicate_objects"       --> DuplicateObjectsHandler
   |-- "group_furniture"         --> GroupFurnitureHandler
-  |-- ... (ещё 34 обработчика)
+  |-- ... (остальные обработчики)
 ```
 
 ### 4.2 Интерфейсы
@@ -447,42 +479,48 @@ public interface CommandDescriptor {
 
 Добавление новой команды требует **ровно двух шагов**:
 
-**Шаг 1.** Создать класс, реализующий `CommandHandler` + `CommandDescriptor`:
+**Шаг 1.** Создать `command/handler/MyCommandHandler.java`, реализующий `CommandHandler` + `CommandDescriptor`:
 
 ```java
-public class MyNewHandler implements CommandHandler, CommandDescriptor {
+package com.sh3d.mcp.command.handler;
+
+import com.sh3d.mcp.bridge.HomeAccessor;
+import com.sh3d.mcp.command.CommandDescriptor;
+import com.sh3d.mcp.command.CommandHandler;
+import com.sh3d.mcp.command.util.SchemaBuilder;
+import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.protocol.Response;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class MyCommandHandler implements CommandHandler, CommandDescriptor {
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
-        String param = request.getString("myParam");
-        if (param == null) {
-            return Response.error("Missing required parameter: myParam");
+        String name = request.getString("name");
+        if (name == null || name.trim().isEmpty()) {
+            return Response.error("Missing or empty parameter: name");
         }
 
-        Object result = accessor.runOnEDT(() -> {
-            Home home = accessor.getHome();
-            // ... работа с моделью ...
-            return someResult;
+        Map<String, Object> data = accessor.runOnEDT(() -> {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("name", name);
+            result.put("wallCount", accessor.getHome().getWalls().size());
+            return result;
         });
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("result", result);
         return Response.ok(data);
     }
 
     @Override
     public String getDescription() {
-        return "English description for Claude";
+        return "Returns a name and the current wall count.";
     }
 
     @Override
     public Map<String, Object> getSchema() {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", "object");
-        Map<String, Object> props = new LinkedHashMap<>();
-        // ... properties
-        schema.put("properties", props);
-        schema.put("required", Arrays.asList("myParam"));
-        return schema;
+        return SchemaBuilder.create()
+                .requiredString("name", "Name to include in the result (non-empty)")
+                .build();
     }
 }
 ```
@@ -490,7 +528,7 @@ public class MyNewHandler implements CommandHandler, CommandDescriptor {
 **Шаг 2.** Зарегистрировать в `SH3DMcpPlugin.createCommandRegistry()`:
 
 ```java
-registry.register("my_new_command", new MyNewHandler());
+registry.register("my_command", new MyCommandHandler());
 ```
 
 Других изменений не требуется: HTTP-сервер, JSON-RPC, MCP `tools/list` --
@@ -519,7 +557,10 @@ registry.register("my_new_command", new MyNewHandler());
    - Ошибки EDT (InterruptedException, CommandException)
 ```
 
-Каждый уровень возвращает корректный JSON-RPC error response.
+Ошибки уровней 1–2 (протокол, неизвестный инструмент) возвращаются в верхнем поле JSON-RPC `error`.
+Ошибки уровня 3 — это `Response.error(...)` (в него же `CommandRegistry` превращает исключения обработчика): клиент
+получает JSON-RPC `result` с `isError: true` и текстом ошибки в `content`, как требует MCP для ошибок выполнения
+инструмента.
 
 ---
 
@@ -527,40 +568,11 @@ registry.register("my_new_command", new MyNewHandler());
 
 ### 5.1 Plugin API
 
-```java
-public class SH3DMcpPlugin extends Plugin {
-    private HttpMcpServer httpServer;
-
-    @Override
-    public PluginAction[] getActions() {
-        HomeAccessor accessor = new HomeAccessor(getHome(), getUserPreferences());
-        ExportableView planView = resolvePlanView();
-        CommandRegistry registry = createCommandRegistry(planView);
-        httpServer = new HttpMcpServer(PluginConfig.load(), registry, accessor);
-
-        if (config.isAutoStart()) {
-            httpServer.start();
-        }
-
-        return new PluginAction[] {
-            new McpSettingsAction(this, httpServer)
-        };
-    }
-
-    @Override
-    public void destroy() {
-        if (httpServer != null && httpServer.isRunning()) {
-            httpServer.stop();
-        }
-    }
-
-    private CommandRegistry createCommandRegistry(ExportableView planView) {
-        CommandRegistry registry = new CommandRegistry();
-        // 46 команд: checkpoint, create_walls, place_furniture, get_state, list_categories, ...
-        return registry;
-    }
-}
-```
+`SH3DMcpPlugin.getActions()` загружает настройки и создаёт для каждого Home собственные
+`HomeAccessor` и реестр 46 команд. Первый экземпляр создаёт общий `HttpMcpServer`
+и запускает его при `autoStart=true`; открытие следующего Home переключает контекст
+общего сервера через `switchContext(registry, accessor)`. `destroy()` переключает
+контекст на последний оставшийся Home либо останавливает сервер, если закрыт последний Home.
 
 **Метаданные плагина** (`ApplicationPlugin.properties` в корне JAR):
 
@@ -569,11 +581,11 @@ id=Plugin#SH3DMcp
 name=SH3D MCP Plugin
 class=com.sh3d.mcp.plugin.SH3DMcpPlugin
 description=HTTP MCP server for Model Context Protocol integration
-version=1.1.0
+version=1.2.0
 license=GPL v2
 provider=SH3D MCP Project
 applicationMinimumVersion=6.0
-javaMinimumVersion=11
+javaMinimumVersion=1.8
 ```
 
 ### 5.1.1 Локализация (i18n)
@@ -584,7 +596,7 @@ UI плагина локализован на 18 языков через ста�
 
 | Bundle | Расположение | Ключей | Назначение |
 |--------|-------------|--------|-----------|
-| `McpPlugin` | `com/sh3d/mcp/plugin/McpPlugin[_XX].properties` | 42 | Все UI-строки диалога и экшена |
+| `McpPlugin` | `com/sh3d/mcp/plugin/McpPlugin[_XX].properties` | — | Все UI-строки диалога и экшена |
 | `ApplicationPlugin` | `ApplicationPlugin[_XX].properties` | 2 | name + description для Plugin Manager |
 | `McpSettingsAction` | `com/sh3d/mcp/plugin/McpSettingsAction[_XX].properties` | 1 | Name для SH3D PluginAction framework |
 
@@ -701,6 +713,7 @@ JSON-обработка разделена на два уровня:
 | `port` | int | 9877 | HTTP-порт сервера |
 | `autoStart` | boolean | true | Автоматический запуск сервера при загрузке плагина |
 | `logLevel` | String | INFO | Уровень логирования (FINE, INFO, WARNING, SEVERE) |
+| `requireToken` | boolean | false | Требовать bearer-токен на `/mcp` |
 
 ### 7.2 Хранение настроек
 
@@ -712,9 +725,10 @@ JSON-обработка разделена на два уровня:
 **Формат файла:**
 ```properties
 # SH3D MCP Plugin Configuration
-port=9877
-autoStart=true
-logLevel=INFO
+sh3d.mcp.port=9877
+sh3d.mcp.autoStart=true
+sh3d.mcp.logLevel=INFO
+sh3d.mcp.requireToken=false
 ```
 
 **Поиск конфигурации (приоритет):**
@@ -729,7 +743,8 @@ logLevel=INFO
 - Мержит секцию `mcpServers.sweethome3d` в `claude_desktop_config.json`
 - Кросс-платформенный поиск конфига (Windows: `%APPDATA%\Claude\`, macOS: `~/Library/Application Support/Claude/`, Linux: `~/.config/Claude/`)
 - Создаёт `.bak` бэкап перед модификацией существующего конфига
-- Claude Desktop не поддерживает `"type": "http"` — используется `npx mcp-remote` как stdio-мост к HTTP endpoint плагина
+- Claude Desktop не загружает `"type": "http"` — используется `npx -y mcp-remote@0.14.3` как stdio-мост к `http://127.0.0.1:port/mcp`
+- При включённом токене добавляет `--header-file` с путём к `sh3d-mcp.token.headers`, без значения токена в конфигурации клиента
 - Вызывается из `McpSettingsDialog` по нажатию кнопки
 
 ### 7.4 Логирование
@@ -757,12 +772,16 @@ sh3d-mcp-plugin/
 |   |-- main/
 |   |   |-- java/com/sh3d/mcp/
 |   |   |   |-- plugin/          # SH3DMcpPlugin, McpSettingsAction, McpSettingsDialog
-|   |   |   |-- http/            # HttpMcpServer, McpRequestHandler, JsonRpcProtocol, ...
+|   |   |   |-- http/            # HttpMcpServer, RequestGuard, McpRequestHandler, ...
 |   |   |   |-- server/          # ServerState, ServerStateListener
 |   |   |   |-- protocol/        # JsonUtil, Request, Response
-|   |   |   |-- command/         # CommandHandler, CommandRegistry, 46 handlers, утилиты, shape generators
-|   |   |   |-- bridge/          # HomeAccessor, CheckpointManager, CommandException, PathValidator
-|   |   |   |-- config/          # PluginConfig
+|   |   |   |-- command/         # Интерфейсы и реестр
+|   |   |   |   |-- handler/     # 46 обработчиков
+|   |   |   |   |-- shape/       # Генераторы геометрии
+|   |   |   |   |   |-- csg/     # Булевы операции
+|   |   |   |   |-- util/        # Общие утилиты
+|   |   |   |-- bridge/          # HomeAccessor, CheckpointManager, ObjectResolver, SafeHomeReader, ...
+|   |   |   |-- config/          # PluginConfig, AuthTokenStore, ClaudeDesktopConfigurator
 |   |   |
 |   |   |-- resources/
 |   |       |-- ApplicationPlugin.properties
@@ -770,12 +789,9 @@ sh3d-mcp-plugin/
 |   |           |-- McpSettingsAction.properties
 |   |
 |   |-- test/
-|       |-- java/com/sh3d/mcp/   # ~89 тестовых классов
+|       |-- java/com/sh3d/mcp/   # Более 3000 тестов
 |
 |-- ARCHITECTURE.md
-|-- CLAUDE.md
-|-- PRD.md
-|-- TO-DOS.md
 |-- sh3d-plugin-spec.md
 ```
 
@@ -784,12 +800,12 @@ sh3d-mcp-plugin/
 ```xml
 <groupId>com.sh3d.mcp</groupId>
 <artifactId>sh3d-mcp-plugin</artifactId>
-<version>0.1.0-SNAPSHOT</version>
+<version>1.2.0</version>
 <packaging>jar</packaging>
 
 <properties>
-    <maven.compiler.source>11</maven.compiler.source>
-    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.release>8</maven.compiler.release>
+    <maven.compiler.testRelease>11</maven.compiler.testRelease>
 </properties>
 
 <dependencies>
@@ -804,17 +820,17 @@ sh3d-mcp-plugin/
 ### 8.3 Сборка и деплой
 
 ```bash
-# Сборка
-mvn clean package
+# Сборка (JDK 11+, Maven 3.9+ через wrapper)
+./mvnw clean package
 
 # Результат
-target/sh3d-mcp-plugin-0.1.0-SNAPSHOT.sh3p
+target/sh3d-mcp-plugin-1.2.0.sh3p
 
 # Деплой (Windows)
-copy target\sh3d-mcp-plugin-0.1.0-SNAPSHOT.sh3p "%APPDATA%\eTeks\Sweet Home 3D\plugins\"
+copy target\sh3d-mcp-plugin-1.2.0.sh3p "%APPDATA%\eTeks\Sweet Home 3D\plugins\"
 
 # Деплой (bash / Git Bash)
-cp target/sh3d-mcp-plugin-0.1.0-SNAPSHOT.sh3p "$APPDATA/eTeks/Sweet Home 3D/plugins/"
+cp target/sh3d-mcp-plugin-1.2.0.sh3p "$APPDATA/eTeks/Sweet Home 3D/plugins/"
 ```
 
 ---
@@ -956,7 +972,7 @@ Claude                    McpRequestHandler    JsonRpcProtocol
 
 **Статус:** Принято (действует)
 
-Ручной парсер (`JsonUtil`) доказал надёжность: ~700 тестов проходят, edge-cases покрыты.
+Ручной парсер (`JsonUtil`) покрыт проверками крайних случаев; в проекте более 3000 тестов.
 Добавлен JSON-RPC 2.0 слой (`JsonRpcProtocol`) поверх `JsonUtil`.
 
 ---
@@ -1019,7 +1035,7 @@ MCP SDK) как прокси между Claude и плагином. Это ра�
 - (+) По-прежнему ноль внешних зависимостей (`com.sun.net.httpserver` в JDK)
 - (+) Прямое подключение Claude → плагин (меньше latency)
 - (+) `.mcp.json` стал проще: `"type": "http"` вместо stdio + JAR path
-- (-) Java 11 ограничивает возможности HTTP-сервера (нет HTTP/2, нет async)
+- (-) Встроенный `HttpServer` не поддерживает HTTP/2 и асинхронный API
 - (-) Плагин берёт на себя JSON-RPC 2.0 и MCP session management (компенсируется простотой протокола)
 
 ---
@@ -1048,30 +1064,33 @@ MCP SDK) как прокси между Claude и плагином. Это ра�
 
 ## Приложение B: Пример сессии (curl)
 
+Пример для режима без токена (по умолчанию). При включённом токене добавьте
+`-H "Authorization: Bearer <token>"` к каждому запросу на `/mcp`.
+
 ```bash
-# 1. Initialize
-curl -s -X POST http://localhost:9877/mcp \
+# 1. Initialize (-D - печатает заголовки ответа, среди них Mcp-Session-Id)
+curl -sS -D - -X POST http://127.0.0.1:9877/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
-# → {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"sweethome3d","version":"0.1.0"}}}
+# → {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"sweethome3d","version":"1.2.0"}}}
 # Запомнить Mcp-Session-Id из response header
 
 # 2. Tools list
-curl -s -X POST http://localhost:9877/mcp \
+curl -s -X POST http://127.0.0.1:9877/mcp \
   -H "Content-Type: application/json" \
   -H "Mcp-Session-Id: <session-id>" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
 # → {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"get_state","description":"...","inputSchema":{...}}, ...]}}
 
 # 3. Call tool: get_state
-curl -s -X POST http://localhost:9877/mcp \
+curl -s -X POST http://127.0.0.1:9877/mcp \
   -H "Content-Type: application/json" \
   -H "Mcp-Session-Id: <session-id>" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_state","arguments":{}}}'
 # → {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\"wallCount\":0,...}"}],"isError":false}}
 
 # 4. Ping
-curl -s -X POST http://localhost:9877/mcp \
+curl -s -X POST http://127.0.0.1:9877/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":4,"method":"ping"}'
 # → {"jsonrpc":"2.0","id":4,"result":{}}

@@ -3,7 +3,8 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 
 import com.eteks.sweethome3d.model.Home;
-import com.eteks.sweethome3d.model.Level;
+import com.sh3d.mcp.bridge.CommandException;
+import java.math.BigDecimal;
 import com.sh3d.mcp.bridge.CheckpointManager;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
@@ -38,8 +39,15 @@ public class RestoreCheckpointHandler implements CommandHandler, CommandDescript
         Integer id = null;
         if (idStr != null) {
             try {
-                id = (int) Float.parseFloat(idStr);
-            } catch (NumberFormatException e) {
+                Object rawId = request.getParams().get("id");
+                if (rawId instanceof String && !idStr.matches("[0-9]+")) {
+                    throw new NumberFormatException();
+                }
+                id = new BigDecimal(idStr).intValueExact();
+                if (id < 0) {
+                    throw new NumberFormatException();
+                }
+            } catch (NumberFormatException | ArithmeticException e) {
                 return Response.error("Invalid 'id' parameter: expected integer, got '" + idStr + "'");
             }
         }
@@ -47,81 +55,27 @@ public class RestoreCheckpointHandler implements CommandHandler, CommandDescript
         Boolean force = request.getBoolean("force");
         boolean isForce = Boolean.TRUE.equals(force);
 
-        // Resolve snapshot
-        CheckpointManager.Snapshot snapshot;
+        final Integer targetId = id;
         try {
-            if (id != null) {
-                if (isForce) {
-                    snapshot = checkpointManager.restoreForce(id);
-                } else {
-                    snapshot = checkpointManager.restore(id);
-                }
-            } else {
-                snapshot = checkpointManager.restore();
-            }
-        } catch (IllegalStateException | IllegalArgumentException e) {
-            return Response.error(e.getMessage());
+            Map<String, Object> data = accessor.runOnEDT(() -> {
+                Home home = accessor.getHome();
+                Map<String, Object> counts = new LinkedHashMap<>();
+                CheckpointManager.Snapshot snapshot = checkpointManager.restore(targetId, isForce,
+                        saved -> counts.putAll(LoadHomeHandler.replaceScene(home, saved.getHome())));
+
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("restoredTo", snapshot.getId());
+                result.put("description", snapshot.getDescription());
+                result.putAll(counts);
+                result.put("depth", checkpointManager.size());
+                return result;
+            });
+            return Response.ok(data);
+        } catch (CommandException e) {
+            // Keep existing lookup-error messages while also reporting replacement failures.
+            Throwable cause = e.getCause();
+            return Response.error(cause != null ? cause.getMessage() : e.getMessage());
         }
-
-        Home source = snapshot.getHome();
-
-        // Apply snapshot to live Home on EDT
-        Map<String, Object> data = accessor.runOnEDT(() -> {
-            Home home = accessor.getHome();
-
-            // Clear everything
-            LoadHomeHandler.clearAll(home);
-
-            // Populate from snapshot
-            int levels = LoadHomeHandler.addAll(home, source.getLevels(), home::addLevel);
-            int walls = LoadHomeHandler.addAll(home, source.getWalls(), home::addWall);
-            int rooms = LoadHomeHandler.addAll(home, source.getRooms(), home::addRoom);
-            int furniture = LoadHomeHandler.addAll(home, source.getFurniture(),
-                    home::addPieceOfFurniture);
-            int labels = LoadHomeHandler.addAll(home, source.getLabels(), home::addLabel);
-            int dimensionLines = LoadHomeHandler.addAll(home, source.getDimensionLines(),
-                    home::addDimensionLine);
-            int polylines = LoadHomeHandler.addAll(home, source.getPolylines(),
-                    home::addPolyline);
-
-            // Cameras
-            LoadHomeHandler.copyCameras(home, source);
-            home.setStoredCameras(source.getStoredCameras());
-
-            // Environment
-            LoadHomeHandler.copyEnvironment(home.getEnvironment(), source.getEnvironment());
-
-            // Compass
-            LoadHomeHandler.copyCompass(home.getCompass(), source.getCompass());
-
-            // Background image
-            home.setBackgroundImage(source.getBackgroundImage());
-
-            // Metadata
-            home.setBasePlanLocked(source.isBasePlanLocked());
-
-            // Selected level
-            Level selectedLevel = source.getSelectedLevel();
-            if (selectedLevel != null) {
-                home.setSelectedLevel(selectedLevel);
-            }
-
-            // Build response
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("restoredTo", checkpointManager.getCursor());
-            result.put("description", snapshot.getDescription());
-            result.put("levels", levels);
-            result.put("walls", walls);
-            result.put("rooms", rooms);
-            result.put("furniture", furniture);
-            result.put("labels", labels);
-            result.put("dimensionLines", dimensionLines);
-            result.put("polylines", polylines);
-            result.put("depth", checkpointManager.size());
-            return result;
-        });
-
-        return Response.ok(data);
     }
 
     @Override

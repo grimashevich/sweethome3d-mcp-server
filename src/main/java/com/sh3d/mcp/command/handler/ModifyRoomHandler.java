@@ -32,6 +32,12 @@ public class ModifyRoomHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "floorShininess", "ceilingShininess");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         String id = request.getString("id");
         if (id == null || id.trim().isEmpty()) {
             return Response.error("Missing required parameter 'id'");

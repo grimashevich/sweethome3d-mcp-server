@@ -1,4 +1,6 @@
 package com.sh3d.mcp.command.handler;
+
+import java.util.Locale;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.ColorParser;
@@ -9,6 +11,7 @@ import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.TextStyle;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import static com.sh3d.mcp.command.util.SchemaUtil.enumProp;
@@ -25,6 +28,12 @@ public class AddLabelHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "x", "y", "angle", "fontSize", "elevation", "pitch");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         Map<String, Object> params = request.getParams();
 
         // Required: text
@@ -82,7 +91,7 @@ public class AddLabelHandler implements CommandHandler, CommandDescriptor {
             String alignStr = request.getString("alignment");
             if (alignStr != null) {
                 try {
-                    alignment = TextStyle.Alignment.valueOf(alignStr.toUpperCase());
+                    alignment = TextStyle.Alignment.valueOf(alignStr.toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException e) {
                     return Response.error("Invalid alignment: '" + alignStr
                             + "'. Expected LEFT, CENTER, or RIGHT");

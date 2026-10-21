@@ -58,6 +58,9 @@ class HttpMcpE2ETest {
         PluginConfig config = mock(PluginConfig.class);
         when(config.getPort()).thenReturn(port);
         when(config.getTokenPath()).thenReturn(tempDir.resolve("sh3d-mcp.token"));
+        // Contract S (T2): the token is optional and off by default. This E2E exercises the token path, so it asks
+        // for the token-required mode explicitly instead of relying on a token always being mandatory.
+        when(config.isRequireToken()).thenReturn(true);
 
         Home home = new Home();
         HomeAccessor accessor = new HomeAccessor(home, null);

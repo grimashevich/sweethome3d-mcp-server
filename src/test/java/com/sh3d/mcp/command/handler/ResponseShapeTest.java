@@ -8,6 +8,7 @@ import com.eteks.sweethome3d.model.Level;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.command.CommandHandler;
+import com.sh3d.mcp.protocol.JsonUtil;
 import com.sh3d.mcp.protocol.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,11 +86,18 @@ class ResponseShapeTest {
 
         assertEquals(Arrays.asList("levelCount", "levels"), keys(data));
         List<Object> levels = asList(data.get("levels"));
-        assertEquals(LEVEL_ITEM_KEYS, keys(levels.get(0)));
-        assertEquals(LEVEL_ITEM_KEYS, keys(levels.get(1)));
-        // list_levels has always reported the position, as a JSON number
-        assertEquals(0, asMap(levels.get(0)).get("id"));
-        assertEquals(1, asMap(levels.get(1)).get("id"));
+        // Issue #9: прежние поля плюс числовое index; место index контракт
+        // не называет — сравниваются состав и порядок прежних полей
+        for (Object level : levels) {
+            List<String> itemKeys = keys(level);
+            assertTrue(itemKeys.remove("index"), "list_levels item must carry 'index': " + keys(level));
+            assertEquals(LEVEL_ITEM_KEYS, itemKeys);
+        }
+        // list_levels reports the stable id, as get_state and add_level do; the position is 'index'
+        assertEquals(home.getLevels().get(0).getId(), asMap(levels.get(0)).get("id"));
+        assertEquals(home.getLevels().get(1).getId(), asMap(levels.get(1)).get("id"));
+        assertEquals("0", JsonUtil.serialize(asMap(levels.get(0)).get("index")));
+        assertEquals("1", JsonUtil.serialize(asMap(levels.get(1)).get("index")));
     }
 
     @Test

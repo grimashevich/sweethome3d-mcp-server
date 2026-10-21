@@ -52,6 +52,12 @@ jobs:
       - name: Build and test
         run: xvfb-run --auto-servernum mvn verify --no-transfer-progress
 
+      - name: Test in Turkish locale
+        if: matrix.java == '11'
+        run: |
+          JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Duser.language=tr -Duser.country=TR" \
+            xvfb-run --auto-servernum bash mvnw test --no-transfer-progress
+
       # Upload coverage only once (JDK 11 run)
       - name: Upload coverage to Codecov
         if: matrix.java == '11'
@@ -61,10 +67,81 @@ jobs:
           files: target/site/jacoco/jacoco.xml
           fail_ci_if_error: false
 
+  # ── End-to-end ────────────────────────────────────────────────────────────
+  # Starts a real Sweet Home 3D with the plugin under Xvfb and runs the *LiveIT tests against it
+  # (scripts/e2e.sh). The matrix JDK is the runtime of Sweet Home 3D itself.
+  e2e:
+    name: End-to-end (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [ '8', '11', '17' ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Sweet Home 3D JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+          architecture: x64
+
+      - name: Set up JDK 11 for Maven and tests
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: temurin
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.m2/wrapper
+          key: ${{ runner.os }}-maven-e2e-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-e2e-
+
+      # Same cache entry as in the test job
+      - name: Cache SweetHome3D.jar
+        id: cache-sh3d
+        uses: actions/cache@v4
+        with:
+          path: lib/SweetHome3D.jar
+          key: sweethome3d-7.5
+
+      - name: Download SweetHome3D.jar
+        if: steps.cache-sh3d.outputs.cache-hit != 'true'
+        run: |
+          curl -fL --retry 5 --retry-all-errors -C - -o lib/SweetHome3D.jar \
+            "https://unlimited.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5.jar"
+
+      - name: Install Xvfb
+        run: sudo apt-get install -y xvfb
+
+      - name: Run end-to-end tests
+        run: SH3D_E2E_JAVA="$SH3D_JAVA_HOME/bin/java" bash scripts/e2e.sh
+        env:
+          SH3D_JAVA_HOME: ${{ env[format('JAVA_HOME_{0}_X64', matrix.java)] }}
+
+      - name: Upload logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-jdk${{ matrix.java }}
+          path: |
+            target/e2e-logs/
+            target/e2e-work/
+            target/failsafe-reports/
+          if-no-files-found: ignore
+
   # ── Release ───────────────────────────────────────────────────────────────
   release:
     name: Release
-    needs: test
+    needs: [ test, e2e ]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

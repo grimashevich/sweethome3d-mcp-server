@@ -1,5 +1,7 @@
 package com.sh3d.mcp.command.util;
 
+import java.util.Locale;
+
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
 import com.eteks.sweethome3d.model.CatalogTexture;
 import com.eteks.sweethome3d.model.FurnitureCatalog;
@@ -119,7 +121,7 @@ public final class CatalogSearchUtil {
                     "Either 'name' or 'catalogId' must be provided");
         }
 
-        String lowerQuery = name.toLowerCase();
+        String lowerQuery = name.toLowerCase(Locale.ROOT);
         List<CatalogPieceOfFurniture> exactMatches = new ArrayList<>();
         List<CatalogPieceOfFurniture> substringMatches = new ArrayList<>();
 
@@ -129,7 +131,7 @@ public final class CatalogSearchUtil {
                 String pieceName = piece.getName();
                 if (pieceName == null) continue;
 
-                String lowerName = pieceName.toLowerCase();
+                String lowerName = pieceName.toLowerCase(Locale.ROOT);
                 if (lowerName.equals(lowerQuery)) {
                     exactMatches.add(piece);
                 } else if (lowerName.contains(lowerQuery)) {
@@ -155,13 +157,13 @@ public final class CatalogSearchUtil {
         String[] alternatives = CatalogAliases.getAlternatives(lowerQuery);
         if (alternatives != null) {
             for (String alt : alternatives) {
-                String lowerAlt = alt.toLowerCase();
+                String lowerAlt = alt.toLowerCase(Locale.ROOT);
                 for (FurnitureCategory category : catalog.getCategories()) {
                     for (CatalogPieceOfFurniture piece : category.getFurniture()) {
                         if (filter != null && !filter.test(piece)) continue;
                         String pieceName = piece.getName();
                         if (pieceName == null) continue;
-                        if (pieceName.toLowerCase().contains(lowerAlt)) {
+                        if (pieceName.toLowerCase(Locale.ROOT).contains(lowerAlt)) {
                             return FurnitureSearchResult.of(piece);
                         }
                     }
@@ -186,12 +188,12 @@ public final class CatalogSearchUtil {
     public static TextureSearchResult findTexture(
             TexturesCatalog catalog, String name, String category) {
 
-        String lowerCategory = category != null ? category.toLowerCase() : null;
+        String lowerCategory = category != null ? category.toLowerCase(Locale.ROOT) : null;
 
         for (TexturesCategory cat : catalog.getCategories()) {
             String catName = cat.getName();
             if (catName == null) continue;
-            if (lowerCategory != null && !catName.toLowerCase().contains(lowerCategory)) continue;
+            if (lowerCategory != null && !catName.toLowerCase(Locale.ROOT).contains(lowerCategory)) continue;
 
             for (CatalogTexture texture : cat.getTextures()) {
                 if (name.equals(texture.getName())) {
@@ -219,7 +221,7 @@ public final class CatalogSearchUtil {
             if (cat != null) {
                 sb.append(", category='").append(cat.getName()).append("'");
             }
-            sb.append(String.format(", size=%.0fx%.0fx%.0f",
+            sb.append(String.format(Locale.ROOT, ", size=%.0fx%.0fx%.0f",
                     piece.getWidth(), piece.getDepth(), piece.getHeight()));
         }
         return sb.toString();

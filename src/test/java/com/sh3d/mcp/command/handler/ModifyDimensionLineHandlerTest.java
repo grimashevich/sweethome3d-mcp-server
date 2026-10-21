@@ -421,8 +421,9 @@ class ModifyDimensionLineHandlerTest {
     }
 
     @Test
-    void testZeroLengthLineIsAccepted() {
-        // same rule as add_dimension_line: coinciding endpoints are not an error
+    void testZeroLengthLineIsRejected() {
+        // Как и в add_dimension_line, совпавшие концы — ошибка до любого изменения сцены;
+        // линия сохраняет прежние концы
         DimensionLine dim = addDimensionLine(home, 10, 20, 510, 40, 25);
 
         Map<String, Object> p = new LinkedHashMap<>();
@@ -431,9 +432,8 @@ class ModifyDimensionLineHandlerTest {
         p.put("yEnd", 20.0);
         Response resp = handler.execute(new Request("modify_dimension_line", p), accessor);
 
-        assertTrue(resp.isOk(), resp.getMessage());
-        assertLineIs(dim, 10, 20, 10, 20, 25);
-        assertEquals(0.0, ((Number) resp.getData().get("length")).doubleValue(), 0.0);
+        assertTrue(resp.isError(), "moving the end onto the start must be rejected");
+        assertLineIs(dim, 10, 20, 510, 40, 25);
     }
 
     // ---- A bad value at any property ----

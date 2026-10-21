@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -34,6 +35,7 @@ public class CheckpointManager {
     private final int maxDepth;
     private final List<Snapshot> timeline = new ArrayList<>();
     private int cursor = -1; // -1 = нет чекпоинтов
+    private int nextId;
 
     public CheckpointManager() {
         this(DEFAULT_MAX_DEPTH);
@@ -57,6 +59,8 @@ public class CheckpointManager {
      * @return информация о созданном снимке
      */
     public synchronized SnapshotInfo push(Home clonedHome, String description) {
+        // Fail before changing history if the integer ID space is exhausted.
+        int followingId = Math.incrementExact(nextId);
         // Truncate forward history if cursor is not at the end
         if (cursor >= 0 && cursor < timeline.size() - 1) {
             timeline.subList(cursor + 1, timeline.size()).clear();
@@ -78,8 +82,9 @@ public class CheckpointManager {
         String desc = (description != null && !description.trim().isEmpty())
                 ? description.trim()
                 : null;
-        Snapshot snapshot = new Snapshot(clonedHome, desc, System.currentTimeMillis());
+        Snapshot snapshot = new Snapshot(nextId, clonedHome, desc, System.currentTimeMillis());
         timeline.add(snapshot);
+        nextId = followingId;
         cursor = timeline.size() - 1;
 
         return toInfo(cursor);
@@ -100,22 +105,19 @@ public class CheckpointManager {
     }
 
     /**
-     * Восстанавливает чекпоинт по id (индексу в таймлайне).
+     * Восстанавливает чекпоинт по стабильному id.
      *
-     * @param id индекс чекпоинта
+     * @param id номер чекпоинта
      * @return снимок для восстановления
      * @throws IllegalArgumentException если id вне диапазона или равен текущей позиции
      */
     public synchronized Snapshot restore(int id) {
-        if (id < 0 || id >= timeline.size()) {
-            throw new IllegalArgumentException(
-                    "Checkpoint id " + id + " out of range [0, " + (timeline.size() - 1) + "]");
-        }
-        if (id == cursor) {
+        int index = indexOf(id);
+        if (index == cursor) {
             throw new IllegalArgumentException(
                     "Checkpoint " + id + " is already the current position");
         }
-        cursor = id;
+        cursor = index;
         return timeline.get(cursor);
     }
 
@@ -124,17 +126,50 @@ public class CheckpointManager {
      * Используется в force-режиме для повторного применения снимка
      * (например, когда сцена была изменена после предыдущего restore).
      *
-     * @param id индекс чекпоинта
+     * @param id номер чекпоинта
      * @return снимок для восстановления
      * @throws IllegalArgumentException если id вне диапазона
      */
     public synchronized Snapshot restoreForce(int id) {
-        if (id < 0 || id >= timeline.size()) {
-            throw new IllegalArgumentException(
-                    "Checkpoint id " + id + " out of range [0, " + (timeline.size() - 1) + "]");
-        }
-        cursor = id;
+        cursor = indexOf(id);
         return timeline.get(cursor);
+    }
+
+    /**
+     * Applies a snapshot and advances the cursor only after a successful replacement.
+     * Call from the EDT: the callback may read and modify the live Home.
+     */
+    public synchronized Snapshot restore(Integer id, boolean force, Consumer<Snapshot> replacement) {
+        int index;
+        if (id == null) {
+            if (cursor <= 0) {
+                throw new IllegalStateException("No previous checkpoint to restore");
+            }
+            index = cursor - 1;
+        } else {
+            index = indexOf(id);
+            if (!force && index == cursor) {
+                throw new IllegalArgumentException("Checkpoint " + id + " is already the current position");
+            }
+        }
+        Snapshot snapshot = timeline.get(index);
+        replacement.accept(snapshot);
+        cursor = index;
+        return snapshot;
+    }
+
+    private int indexOf(int id) {
+        for (int i = 0; i < timeline.size(); i++) {
+            if (timeline.get(i).getId() == id) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("Checkpoint id " + id + " not found (out of range or discarded)");
+    }
+
+    /** Stable number of the current checkpoint, or -1 for an empty timeline. */
+    public synchronized int getCurrentId() {
+        return cursor < 0 ? -1 : timeline.get(cursor).getId();
     }
 
     /**
@@ -207,7 +242,7 @@ public class CheckpointManager {
 
     private SnapshotInfo toInfo(int index) {
         Snapshot snap = timeline.get(index);
-        return new SnapshotInfo(index, snap.getDescription(), snap.getTimestamp(), index == cursor);
+        return new SnapshotInfo(snap.getId(), snap.getDescription(), snap.getTimestamp(), index == cursor);
     }
 
     // --- Inner classes ---
@@ -216,16 +251,27 @@ public class CheckpointManager {
      * Хранит клон Home + метаданные.
      */
     public static class Snapshot {
+        private final int id;
         private final Home home;
         private final String description;
         private final long timestamp;
 
-        Snapshot(Home home, String description, long timestamp) {
+        Snapshot(int id, Home home, String description, long timestamp) {
+            this.id = id;
             this.home = home;
             this.description = description;
             this.timestamp = timestamp;
         }
 
+        public int getId() {
+            return id;
+        }
+
+        /**
+         * Сохранённый дом — только для чтения. Его объекты нельзя ни менять, ни добавлять
+         * в другой Home: снимок применяется много раз и обязан оставаться состоянием
+         * на момент создания чекпоинта. В живую сцену переносится его копия.
+         */
         public Home getHome() {
             return home;
         }

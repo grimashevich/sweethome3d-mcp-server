@@ -99,10 +99,11 @@ class AddDimensionLineHandlerTest {
     }
 
     @Test
-    void testZeroLengthLine() {
+    void testZeroLengthLineIsRejected() {
+        // Совпавшие концы размерной линии — ошибка до любого изменения сцены
         Response resp = exec(params(100, 100, 100, 100, 20));
-        assertTrue(resp.isOk());
-        assertEquals(0f, ((Number) resp.getData().get("length")).floatValue(), 0.01f);
+        assertTrue(resp.isError(), "a dimension line with coinciding ends must be rejected");
+        assertTrue(home.getDimensionLines().isEmpty());
     }
 
     @Test

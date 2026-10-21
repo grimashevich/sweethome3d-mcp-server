@@ -7,7 +7,7 @@
 
     <groupId>com.sh3d.mcp</groupId>
     <artifactId>sh3d-mcp-plugin</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <packaging>jar</packaging>
 
     <name>Sweet Home 3D MCP Plugin</name>
@@ -22,8 +22,8 @@
     </licenses>
 
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.release>8</maven.compiler.release>
+        <maven.compiler.testRelease>11</maven.compiler.testRelease>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -90,7 +90,7 @@
                             <rules>
                                 <requireJavaVersion>
                                     <version>[11,)</version>
-                                    <message>JDK 11+ required (project targets Java 11 bytecode)</message>
+                                    <message>JDK 11+ required to build and run tests (plugin targets Java 8 bytecode)</message>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>[3.9,)</version>
@@ -102,14 +102,12 @@
                 </executions>
             </plugin>
 
-            <!-- Compiler: Java 11 -->
+            <!-- Compiler: Java 8 APIs and bytecode for the plugin, Java 11 for tests -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>11</source>
-                    <target>11</target>
                     <encoding>UTF-8</encoding>
                 </configuration>
             </plugin>
@@ -222,6 +220,53 @@
                                         <echo>Deployed to ${sh3d.plugins.dir}</echo>
                                     </target>
                                 </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+          End-to-end tests against a live Sweet Home 3D: bash scripts/e2e.sh
+          The script starts Sweet Home 3D with the plugin and then runs: ./mvnw -Pe2e verify -Dsh3d.e2e.port=<port>
+          Only the *LiveIT classes run in this profile; unit tests and the coverage check belong to the default build.
+        -->
+        <profile>
+            <id>e2e</id>
+            <properties>
+                <jacoco.skip>true</jacoco.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration>
+                            <includes>
+                                <include>**/*LiveIT.java</include>
+                            </includes>
+                            <!-- The test JVM only talks HTTP and reads saved .sh3d files: it needs no display -->
+                            <argLine>-Djava.awt.headless=true</argLine>
+                            <systemPropertyVariables>
+                                <sh3d.e2e.pluginVersion>${project.version}</sh3d.e2e.pluginVersion>
+                            </systemPropertyVariables>
+                            <trimStackTrace>true</trimStackTrace>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
                             </execution>
                         </executions>
                     </plugin>

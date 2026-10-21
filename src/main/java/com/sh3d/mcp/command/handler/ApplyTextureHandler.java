@@ -12,6 +12,7 @@ import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.bridge.ObjectResolver;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import static com.sh3d.mcp.command.util.FormatUtil.textureName;
@@ -49,6 +50,12 @@ public class ApplyTextureHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "angle", "scale");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         // --- Validate required params ---
         String targetType = request.getString("targetType");
         if (targetType == null) {

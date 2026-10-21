@@ -6,6 +6,7 @@ import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.Sash;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,12 +30,14 @@ public final class SashUtil {
 
     public static final String PARAM_PRESET = "sashPreset";
     public static final String PARAM_SASHES = "sashes";
-    public static final List<String> PRESETS = List.of("single_left", "single_right", "double", "none");
+    public static final List<String> PRESETS = Collections.unmodifiableList(
+            Arrays.asList("single_left", "single_right", "double", "none"));
 
     /** Ошибка применения створок к изделию, которое не дверь и не окно. */
     public static final String NOT_DOOR_OR_WINDOW = "Sashes can only be set on doors and windows";
 
-    private static final List<String> FIELDS = List.of("xAxis", "yAxis", "width", "startAngle", "endAngle");
+    private static final List<String> FIELDS = Collections.unmodifiableList(
+            Arrays.asList("xAxis", "yAxis", "width", "startAngle", "endAngle"));
 
     private SashUtil() {}
 
@@ -173,11 +176,11 @@ public final class SashUtil {
     private static List<Leaf> preset(String name) {
         switch (name) {
             case "single_left":
-                return List.of(leftLeaf(1f));
+                return Collections.singletonList(leftLeaf(1f));
             case "single_right":
-                return List.of(rightLeaf(1f));
+                return Collections.singletonList(rightLeaf(1f));
             case "double":
-                return List.of(leftLeaf(0.5f), rightLeaf(0.5f));
+                return Collections.unmodifiableList(Arrays.asList(leftLeaf(0.5f), rightLeaf(0.5f)));
             case "none":
                 return Collections.emptyList();
             default:

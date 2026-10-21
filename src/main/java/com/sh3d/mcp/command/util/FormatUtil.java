@@ -1,5 +1,7 @@
 package com.sh3d.mcp.command.util;
 
+import java.util.Locale;
+
 import com.eteks.sweethome3d.model.Camera;
 import com.eteks.sweethome3d.model.DimensionLine;
 import com.eteks.sweethome3d.model.HomeEnvironment;
@@ -50,7 +52,7 @@ public final class FormatUtil {
      */
     public static String colorToHex(Integer color) {
         if (color == null) return null;
-        return String.format("#%06X", color & 0xFFFFFF);
+        return String.format(Locale.ROOT, "#%06X", color & 0xFFFFFF);
     }
 
     /**

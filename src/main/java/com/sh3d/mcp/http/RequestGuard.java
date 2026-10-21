@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
@@ -33,6 +34,8 @@ public final class RequestGuard extends Filter {
     private final String allowedOriginIp;
     private final String allowedOriginName;
     private final Supplier<String> tokenSupplier;
+    private final BooleanSupplier requireToken;
+    private final boolean defaultPort;
 
     /**
      * @param port          the port the server is bound to
@@ -41,27 +44,35 @@ public final class RequestGuard extends Filter {
      *                      {@code null} rejects every request.
      */
     public RequestGuard(int port, Supplier<String> tokenSupplier) {
+        this(port, tokenSupplier, () -> tokenSupplier != null);
+    }
+
+    /** A dynamic token mode, read once for each request after the Host/Origin checks. */
+    public RequestGuard(int port, Supplier<String> tokenSupplier, BooleanSupplier requireToken) {
         this.allowedHostIp = "127.0.0.1:" + port;
         this.allowedHostName = "localhost:" + port;
         this.allowedOriginIp = "http://" + allowedHostIp;
         this.allowedOriginName = "http://" + allowedHostName;
         this.tokenSupplier = tokenSupplier;
+        this.requireToken = requireToken;
+        this.defaultPort = port == 80;
     }
 
     @Override
     public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
         Headers headers = exchange.getRequestHeaders();
 
-        if (!isAllowedHost(headers.getFirst("Host"))) {
+        List<String> hosts = headers.get("Host");
+        if (!isSingleValue(hosts) || !isAllowedHost(hosts.get(0))) {
             reject(exchange, 403, "Forbidden host");
             return;
         }
-        String origin = headers.getFirst("Origin");
-        if (origin != null && !isAllowedOrigin(origin)) {
+        List<String> origins = headers.get("Origin");
+        if (origins != null && (!isSingleValue(origins) || !isAllowedOrigin(origins.get(0)))) {
             reject(exchange, 403, "Forbidden origin");
             return;
         }
-        if (tokenSupplier != null && !isAuthorized(headers.get("Authorization"))) {
+        if (requireToken.getAsBoolean() && !isAuthorized(headers.get("Authorization"))) {
             exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer realm=\"sh3d-mcp\"");
             reject(exchange, 401, "Unauthorized");
             return;
@@ -81,15 +92,23 @@ public final class RequestGuard extends Filter {
 
     private boolean isAllowedHost(String host) {
         return host != null
-                && (host.equalsIgnoreCase(allowedHostIp) || host.equalsIgnoreCase(allowedHostName));
+                && (host.equalsIgnoreCase(allowedHostIp) || host.equalsIgnoreCase(allowedHostName)
+                || (defaultPort && (host.equalsIgnoreCase("127.0.0.1") || host.equalsIgnoreCase("localhost"))));
     }
 
     private boolean isAllowedOrigin(String origin) {
-        return origin.equalsIgnoreCase(allowedOriginIp) || origin.equalsIgnoreCase(allowedOriginName);
+        return origin.equalsIgnoreCase(allowedOriginIp) || origin.equalsIgnoreCase(allowedOriginName)
+                || (defaultPort && (origin.equalsIgnoreCase("http://127.0.0.1")
+                || origin.equalsIgnoreCase("http://localhost")));
+    }
+
+    private static boolean isSingleValue(List<String> values) {
+        return values != null && values.size() == 1 && values.get(0) != null
+                && values.get(0).indexOf(',') < 0;
     }
 
     private boolean isAuthorized(List<String> authorization) {
-        String expected = tokenSupplier.get();
+        String expected = tokenSupplier == null ? null : tokenSupplier.get();
         if (expected == null || authorization == null || authorization.size() != 1) {
             return false;
         }

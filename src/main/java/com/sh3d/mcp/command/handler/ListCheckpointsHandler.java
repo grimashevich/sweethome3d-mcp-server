@@ -37,7 +37,7 @@ public class ListCheckpointsHandler implements CommandHandler, CommandDescriptor
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("count", snapshots.size());
-        data.put("cursor", checkpointManager.getCursor());
+        data.put("cursor", checkpointManager.getCurrentId());
         data.put("maxDepth", checkpointManager.getMaxDepth());
         data.put("checkpoints", items);
         return Response.ok(data);

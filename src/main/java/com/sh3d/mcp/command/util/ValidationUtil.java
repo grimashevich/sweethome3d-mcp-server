@@ -1,6 +1,7 @@
 package com.sh3d.mcp.command.util;
 
 import java.util.Map;
+import java.util.List;
 
 /**
  * Common validation utilities for command handlers.
@@ -51,14 +52,60 @@ public final class ValidationUtil {
                 continue;
             }
             Object val = params.get(key);
+            String finiteError = finiteInputError(val, key);
+            if (finiteError != null) {
+                return finiteError;
+            }
             if (!(val instanceof Number)) {
                 return "Parameter '" + key + "' must be a number, got: "
                         + (val instanceof String ? "\"" + val + "\" (a string)" : val);
             }
-            if (!Float.isFinite(((Number) val).floatValue())) {
-                return "Parameter '" + key + "' must be a finite number, got: " + val;
+        }
+        return null;
+    }
+
+    /**
+     * Preflights numeric inputs before any setters or range checks. Unlike
+     * {@link #validateFiniteNumbers}, this preserves handlers' existing rules for
+     * nulls, numeric strings and other types: only non-finite numbers are rejected.
+     * Nested numeric arrays (points, vertices and triangle indices) are checked too.
+     */
+    public static String validateFiniteInputs(Map<String, Object> params, String... keys) {
+        for (String key : keys) {
+            if (params.containsKey(key)) {
+                String error = finiteInputError(params.get(key), key);
+                if (error != null) {
+                    return error;
+                }
             }
         }
         return null;
+    }
+
+    private static String finiteInputError(Object value, String path) {
+        if (value instanceof List) {
+            List<?> values = (List<?>) value;
+            for (int i = 0; i < values.size(); i++) {
+                String error = finiteInputError(values.get(i), path + "[" + i + "]");
+                if (error != null) {
+                    return error;
+                }
+            }
+            return null;
+        }
+        float number;
+        if (value instanceof Number) {
+            number = ((Number) value).floatValue();
+        } else if (value instanceof String) {
+            try {
+                number = Float.parseFloat((String) value);
+            } catch (NumberFormatException e) {
+                return null; // Type validation belongs to the handler.
+            }
+        } else {
+            return null;
+        }
+        return Float.isFinite(number) ? null
+                : "Parameter '" + path + "' must be a finite number, got: " + value;
     }
 }

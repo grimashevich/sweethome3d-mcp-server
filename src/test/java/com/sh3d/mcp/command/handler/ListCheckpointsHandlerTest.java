@@ -197,13 +197,16 @@ class ListCheckpointsHandlerTest {
         Response resp = executeList();
         Map<String, Object> data = (Map<String, Object>) resp.getData();
         assertEquals(2, data.get("count"));
-        assertEquals(1, data.get("cursor"));
+        // cursor — стабильный номер точки; номера 1 и 2 выданы усечённым точкам
+        assertEquals(3, data.get("cursor"));
 
         List<Map<String, Object>> checkpoints =
                 (List<Map<String, Object>>) data.get("checkpoints");
         assertEquals(2, checkpoints.size());
         assertEquals("cp-0", checkpoints.get(0).get("description"));
         assertEquals("cp-new", checkpoints.get(1).get("description"));
+        assertEquals(0, checkpoints.get(0).get("id"));
+        assertEquals(3, checkpoints.get(1).get("id"));
         assertTrue((boolean) checkpoints.get(1).get("current"));
     }
 

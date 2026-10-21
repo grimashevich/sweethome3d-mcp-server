@@ -4,13 +4,18 @@ import com.sh3d.mcp.command.CommandDescriptor;
 
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.Level;
+import com.eteks.sweethome3d.model.UserPreferences;
+import com.eteks.sweethome3d.viewcontroller.PlanController;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.Map;
 import com.sh3d.mcp.command.util.FormatUtil;
 
@@ -22,6 +27,12 @@ public class AddLevelHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "elevation", "height", "floorThickness");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         String name = request.getString("name");
         if (name == null || name.trim().isEmpty()) {
             return Response.error("Parameter 'name' is required and must not be empty");
@@ -42,6 +53,29 @@ public class AddLevelHandler implements CommandHandler, CommandDescriptor {
             Home home = accessor.getHome();
 
             Level level = new Level(name.trim(), elevation, floorThickness, height);
+            if (home.getLevels().isEmpty()) {
+                List<Consumer<Level>> existing = new ArrayList<>();
+                home.getFurniture().forEach(item -> existing.add(item::setLevel));
+                home.getWalls().forEach(item -> existing.add(item::setLevel));
+                home.getRooms().forEach(item -> existing.add(item::setLevel));
+                home.getPolylines().forEach(item -> existing.add(item::setLevel));
+                home.getDimensionLines().forEach(item -> existing.add(item::setLevel));
+                home.getLabels().forEach(item -> existing.add(item::setLevel));
+                if (!existing.isEmpty()) {
+                    Level lower = level;
+                    if (elevation != 0) {
+                        UserPreferences preferences = accessor.getUserPreferences();
+                        lower = preferences != null
+                                ? new Level(preferences.getLocalizedString(PlanController.class, "levelName", 0),
+                                        0, preferences.getNewFloorThickness(), preferences.getNewWallHeight())
+                                : new Level("Level 0", 0, 12f, home.getWallHeight());
+                        home.addLevel(lower);
+                    }
+                    for (Consumer<Level> assignment : existing) {
+                        assignment.accept(lower);
+                    }
+                }
+            }
             home.addLevel(level);
             home.setSelectedLevel(level);
 
@@ -57,20 +91,20 @@ public class AddLevelHandler implements CommandHandler, CommandDescriptor {
     public String getDescription() {
         return "Creates a new level (floor/storey) in the home. The new level becomes the active (selected) level. "
                 + "All subsequent create commands (walls, rooms, furniture) will be placed on the selected level. "
-                + "Elevation is the bottom height of the level in cm (e.g., 0 for ground floor, 250 for second floor). "
-                + "Height is the wall height on this level (default 250 cm). "
+                + "Elevation is the bottom height of the level in cm (e.g., 0 for ground floor, 262 for second floor). "
+                + "Height is the floor-to-ceiling height of the level (default 250 cm), separate from floorThickness. "
+                + "An upper level typically starts at the previous level's elevation + height + floorThickness. "
                 + "Use list_levels to see all levels, set_selected_level to switch between them."
-                + "\n\nIMPORTANT: Objects created before any levels exist have no level assignment (level=null) "
-                + "and remain visible on ALL levels. For clean multi-level projects, create levels first "
-                + "with add_level before placing walls/rooms/furniture, or use clear_scene to start fresh.";
+                + " When the home has objects but no levels, existing objects are assigned to the new level at elevation 0, "
+                + "or to an automatically created ground level if the requested elevation is nonzero.";
     }
 
     @Override
     public Map<String, Object> getSchema() {
         return SchemaBuilder.create()
                 .requiredString("name", "Name of the level (e.g., 'Ground Floor', 'Second Floor', 'Attic')")
-                .requiredNumber("elevation", "Bottom elevation of the level in cm. 0 for ground floor, typically previous level's elevation + height for upper floors")
-                .numberWithDefault("height", "Wall height on this level in cm", 250)
+                .requiredNumber("elevation", "Bottom elevation of the level in cm. 0 for ground floor, typically previous level's elevation + height + floorThickness for upper floors")
+                .numberWithDefault("height", "Floor-to-ceiling height of this level in cm", 250)
                 .numberWithDefault("floorThickness", "Floor/ceiling slab thickness in cm", 12)
                 .build();
     }

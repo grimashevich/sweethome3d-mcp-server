@@ -4,6 +4,7 @@ import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.ColorParser;
 import com.sh3d.mcp.command.util.SashUtil;
+import com.sh3d.mcp.command.util.ValidationUtil;
 
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
@@ -46,6 +47,38 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
                     + "Supported: x, y, angle, elevation, width, depth, height, color, visible, mirrored, name, sashPreset, sashes");
         }
 
+        String finiteError = ValidationUtil.validateFiniteInputs(params,
+                "x", "y", "angle", "elevation", "width", "depth", "height");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
+        // Parse every value before touching the live piece.
+        final Map<String, Float> numbers = new LinkedHashMap<>();
+        final Boolean visible;
+        final Boolean mirrored;
+        final String newName;
+        try {
+            for (String key : Arrays.asList("x", "y", "angle", "elevation", "width", "depth", "height")) {
+                if (params.containsKey(key)) {
+                    numbers.put(key, request.getFloat(key));
+                }
+            }
+            visible = request.getBoolean("visible");
+            mirrored = request.getBoolean("mirrored");
+            newName = request.getString("name");
+        } catch (IllegalArgumentException e) {
+            return Response.error(e.getMessage());
+        }
+
+        // A zero group dimension would make the next resize divide by zero in SH3D.
+        for (String key : Arrays.asList("width", "depth", "height")) {
+            Float size = numbers.get(key);
+            if (size != null && size <= 0) {
+                return Response.error("Parameter '" + key + "' must be greater than 0");
+            }
+        }
+
         // Validate color format before EDT
         ColorParser.ColorResult colorResult = ColorParser.parseNullable(params, "color");
         if (colorResult != null && colorResult.hasError()) {
@@ -77,29 +110,52 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
                 return err;
             }
 
+            if (!piece.isResizable() && (numbers.containsKey("width")
+                    || numbers.containsKey("depth") || numbers.containsKey("height") || mirrored != null)) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("_error", "Piece isn't resizable");
+                return err;
+            }
+
+            // SH3D checks this even when clearing an already-null color.
+            if (colorResult != null && !piece.isTexturable()) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("_error", "Piece isn't texturable");
+                return err;
+            }
+
             // Position
             if (params.containsKey("x")) {
-                piece.setX(request.getFloat("x"));
+                piece.setX(numbers.get("x"));
             }
             if (params.containsKey("y")) {
-                piece.setY(request.getFloat("y"));
+                piece.setY(numbers.get("y"));
             }
             if (params.containsKey("angle")) {
-                piece.setAngle((float) Math.toRadians(request.getFloat("angle")));
+                piece.setAngle((float) Math.toRadians(numbers.get("angle")));
             }
             if (params.containsKey("elevation")) {
-                piece.setElevation(request.getFloat("elevation"));
+                piece.setElevation(numbers.get("elevation"));
             }
 
             // Dimensions
             if (params.containsKey("width")) {
-                piece.setWidth(request.getFloat("width"));
+                piece.setWidth(numbers.get("width"));
             }
             if (params.containsKey("depth")) {
-                piece.setDepth(request.getFloat("depth"));
+                piece.setDepth(numbers.get("depth"));
             }
             if (params.containsKey("height")) {
-                piece.setHeight(request.getFloat("height"));
+                piece.setHeight(numbers.get("height"));
+            }
+
+            // Without the application's PlanController there is no listener to
+            // update these dimensions. Rotated models still use its model-based bounds.
+            if (!piece.isHorizontallyRotated() && (numbers.containsKey("width")
+                    || numbers.containsKey("depth") || numbers.containsKey("height"))) {
+                piece.setWidthInPlan(piece.getWidth());
+                piece.setDepthInPlan(piece.getDepth());
+                piece.setHeightInPlan(piece.getHeight());
             }
 
             // Appearance
@@ -110,18 +166,15 @@ public class ModifyFurnitureHandler implements CommandHandler, CommandDescriptor
             }
 
             // Flags
-            Boolean visible = request.getBoolean("visible");
             if (visible != null) {
                 piece.setVisible(visible);
             }
-            Boolean mirrored = request.getBoolean("mirrored");
             if (mirrored != null) {
                 piece.setModelMirrored(mirrored);
             }
 
             // Name
             if (params.containsKey("name")) {
-                String newName = request.getString("name");
                 if (newName != null) {
                     piece.setName(newName);
                 }

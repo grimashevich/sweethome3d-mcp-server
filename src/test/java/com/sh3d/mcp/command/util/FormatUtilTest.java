@@ -516,15 +516,12 @@ class FormatUtilTest {
         }
 
         @Test
-        void levelInfoPassesTheIdThroughVerbatim() {
-            // list_levels reports a positional index while get_state and add_level report
-            // the stable HomeObject id, so the builder must not impose either.
+        void levelInfoReportsTheStableId() {
+            // Issue #9: list_levels, get_state и add_level возвращают стабильный Level.getId();
+            // list_levels передаёт позицию отдельным полем index.
             Level level = new Level("Ground floor", 0, 12, 250);
 
-            assertEquals(0, FormatUtil.buildLevelInfo(0, level).get("id"));
-            assertEquals(3, FormatUtil.buildLevelInfo(3, level).get("id"));
             assertEquals(level.getId(), FormatUtil.buildLevelInfo(level.getId(), level).get("id"));
-            assertEquals("caller-supplied", FormatUtil.buildLevelInfo("caller-supplied", level).get("id"));
         }
 
         @Test

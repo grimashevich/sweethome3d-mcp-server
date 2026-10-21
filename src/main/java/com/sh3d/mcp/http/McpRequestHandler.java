@@ -56,7 +56,7 @@ public class McpRequestHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
-            // Валидация Origin (DNS rebinding protection)
+            // Legacy localhost check; RequestGuard also enforces the exact origin and port.
             if (!validateOrigin(exchange)) {
                 sendJson(exchange, 403, JsonRpcProtocol.formatError(null,
                         JsonRpcProtocol.INTERNAL_ERROR, "Forbidden origin"));
@@ -352,7 +352,7 @@ public class McpRequestHandler implements HttpHandler {
      * This prevents DNS rebinding attacks like "http://localhost.evil.com".
      */
     private static boolean isLocalhostOrigin(String origin, String prefix) {
-        if (!origin.startsWith(prefix)) {
+        if (!origin.regionMatches(true, 0, prefix, 0, prefix.length())) {
             return false;
         }
         return origin.length() == prefix.length()

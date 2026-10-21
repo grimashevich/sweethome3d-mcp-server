@@ -1,4 +1,6 @@
 package com.sh3d.mcp.command.handler;
+
+import java.util.Locale;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
@@ -11,6 +13,7 @@ import com.eteks.sweethome3d.model.ObserverCamera;
 import com.sh3d.mcp.bridge.CommandException;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
@@ -43,6 +46,22 @@ public class SetCameraHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "x", "y", "z", "yaw", "pitch", "fov");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+        Map<String, Object> lookAt = parseLookAt(request);
+        if (lookAt != null) {
+            String lookAtError = ValidationUtil.validateFiniteInputs(lookAt, "x", "y", "z");
+            if (lookAtError != null) {
+                return Response.error("lookAt: " + lookAtError);
+            }
+            if (lookAt.get("x") == null || lookAt.get("y") == null) {
+                return Response.error("lookAt requires both 'x' and 'y' coordinates");
+            }
+        }
+
         String name = request.getString("name");
 
         // Restore from stored camera by name
@@ -54,12 +73,17 @@ public class SetCameraHandler implements CommandHandler, CommandDescriptor {
         if (mode == null || mode.isEmpty()) {
             return Response.error("Parameter 'mode' is required (top or observer), or use 'name' to restore a stored camera");
         }
-        mode = mode.toLowerCase();
+        mode = mode.toLowerCase(Locale.ROOT);
         if (!"top".equals(mode) && !"observer".equals(mode)) {
             return Response.error("Parameter 'mode' must be 'top' or 'observer', got '" + mode + "'");
         }
 
-        Map<String, Object> lookAt = parseLookAt(request);
+        if (lookAt != null) {
+            String lookAtError = ValidationUtil.validateFiniteNumbers(lookAt, "x", "y", "z");
+            if (lookAtError != null) {
+                return Response.error("lookAt: " + lookAtError);
+            }
+        }
         String target = request.getString("target");
 
         Response validation = validateParams(request, mode, lookAt, target);
@@ -138,7 +162,7 @@ public class SetCameraHandler implements CommandHandler, CommandDescriptor {
             return lookAt;
         } else if (target.contains(":")) {
             String[] parts = target.split(":", 2);
-            String type = parts[0].toLowerCase();
+            String type = parts[0].toLowerCase(Locale.ROOT);
             String id = parts[1];
             if (id.isEmpty()) {
                 throw new CommandException("Parameter 'target' has empty ID after ':'. Expected format: 'furniture:<id>', 'wall:<id>', or 'room:<id>'");
@@ -148,7 +172,7 @@ public class SetCameraHandler implements CommandHandler, CommandDescriptor {
             }
             SceneBounds bounds = boundsCalculator.computeFocusBounds(accessor, type, id);
             if (bounds == null) {
-                String label = type.substring(0, 1).toUpperCase() + type.substring(1);
+                String label = type.substring(0, 1).toUpperCase(Locale.ROOT) + type.substring(1);
                 throw new CommandException(label + " not found: " + id);
             }
             Map<String, Object> lookAt = new LinkedHashMap<>();
