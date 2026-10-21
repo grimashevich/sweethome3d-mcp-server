@@ -1,4 +1,6 @@
 package com.sh3d.mcp.command.handler;
+
+import java.util.Locale;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.OverheadCameraComputer;
@@ -13,6 +15,7 @@ import com.eteks.sweethome3d.model.Room;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import javax.imageio.IIOImage;
@@ -115,6 +118,12 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "width", "height", "x", "y", "z", "yaw", "pitch", "fov", "angles");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         int width = (int) request.getFloat("width", DEFAULT_WIDTH);
         int height = (int) request.getFloat("height", DEFAULT_HEIGHT);
 
@@ -129,7 +138,7 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
         if (qualityStr == null) {
             qualityStr = "low";
         }
-        qualityStr = qualityStr.toLowerCase();
+        qualityStr = qualityStr.toLowerCase(Locale.ROOT);
         if (!"low".equals(qualityStr) && !"medium".equals(qualityStr) && !"high".equals(qualityStr)) {
             return Response.error("Parameter 'quality' must be 'low', 'medium', or 'high', got '" + qualityStr + "'");
         }
@@ -146,7 +155,7 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
         if (format == null) {
             format = (filePath != null && !filePath.trim().isEmpty()) ? "png" : "jpeg";
         }
-        format = format.toLowerCase();
+        format = format.toLowerCase(Locale.ROOT);
         if (!"png".equals(format) && !"jpeg".equals(format)) {
             return Response.error("Parameter 'format' must be 'png' or 'jpeg', got '" + format + "'");
         }
@@ -261,7 +270,7 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
         if (params.focusOn != null) {
             bounds = boundsCalculator.computeFocusBounds(accessor, params.focusType, params.focusId);
             if (bounds == null) {
-                String label = params.focusType.substring(0, 1).toUpperCase() + params.focusType.substring(1);
+                String label = params.focusType.substring(0, 1).toUpperCase(Locale.ROOT) + params.focusType.substring(1);
                 return Response.error(label + " not found: " + params.focusId);
             }
         } else {
@@ -327,7 +336,7 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
                 return Response.error("Parameter 'focusOn' format must be 'furniture:<id>' "
                         + "or 'room:<id>', got '" + params.focusOn + "'");
             }
-            params.focusType = parts[0].trim().toLowerCase();
+            params.focusType = parts[0].trim().toLowerCase(Locale.ROOT);
             if (!"furniture".equals(params.focusType) && !"room".equals(params.focusType)) {
                 return Response.error("Parameter 'focusOn' must start with 'furniture:' or 'room:', "
                         + "got '" + params.focusOn + "'");
@@ -603,7 +612,7 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
 
     static String generateIndexedFilePath(String filePath, int index) {
         String clean = filePath.trim();
-        String lower = clean.toLowerCase();
+        String lower = clean.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".png")) {
             return clean.substring(0, clean.length() - 4) + "_" + index + ".png";
         }
@@ -622,7 +631,8 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
      */
     private static void writeImage(BufferedImage image, String format, File file) throws Exception {
         if ("jpeg".equals(format)) {
-            try (ImageOutputStream ios = ImageIO.createImageOutputStream(file)) {
+            try (java.io.OutputStream output = Files.newOutputStream(file.toPath());
+                 ImageOutputStream ios = new MemoryCacheImageOutputStream(output)) {
                 writeJpeg(ensureRgb(image), ios);
             }
         } else {
@@ -687,7 +697,7 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
                 + "for detailed inspection of placement, rotation, and proportions.\n\n"
                 + "WALLS: By default walls are hidden in overhead mode for unobstructed view of furniture. "
                 + "Set hideWalls=false to show walls (useful for checking wall textures, doors, or windows).\n\n"
-                + "Standard mode: returns a single image from the current or specified camera position. "
+                + "Standard mode (view omitted): returns a single image from the current or specified camera position. "
                 + "If 'filePath' is provided, saves image(s) to disk and returns only metadata (no base64). "
                 + "Use quality 'low' for quick preview, 'medium' for supersampled output "
                 + "(renders at 2x resolution then downscales — smoother than low, similar speed), "
@@ -698,10 +708,9 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
     public Map<String, Object> getSchema() {
         // Enum props with defaults need raw construction
         Map<String, Object> viewProp = enumProp(
-                "View mode: 'overhead' for automatic bird's eye orbit rendering from 4 diagonal angles. "
+                "View mode (if omitted, uses the current camera): 'overhead' for automatic bird's eye orbit rendering from 4 diagonal angles. "
                         + "Recommended for scene assessment. Incompatible with x/y/z/yaw parameters.",
                 "overhead");
-        viewProp.put("default", "overhead");
 
         Map<String, Object> qualityProp = enumProp(
                 "Quality: 'low' (fast preview), 'medium' (supersampled — renders at 2x resolution then downscales for smoother output, same speed as low), or 'high' (ray-traced, slow)",
@@ -743,7 +752,7 @@ public class RenderPhotoHandler implements CommandHandler, CommandDescriptor {
                 .number("yaw", "Camera horizontal rotation in degrees (standard mode only)")
                 .number("pitch",
                         "Camera vertical tilt in degrees. For overhead mode: bird's eye angle "
-                                + "(default 30, range 0-90). For standard mode: negative = looking down.")
+                                + "(default 30, range 0-90). For standard mode: positive = looking down.")
                 .numberWithDefault("fov", "Camera field of view in degrees", 63)
                 .build();
     }

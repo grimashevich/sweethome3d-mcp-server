@@ -1,4 +1,6 @@
 package com.sh3d.mcp.command.handler;
+
+import java.util.Locale;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 
@@ -40,11 +42,11 @@ public class ListFurnitureCatalogHandler implements CommandHandler, CommandDescr
         String query = request.getString("query");
         String categoryFilter = request.getString("category");
         String typeFilter = request.getString("type");
-        String lowerQuery = query != null ? query.toLowerCase() : null;
-        String lowerCategory = categoryFilter != null ? categoryFilter.toLowerCase() : null;
+        String lowerQuery = query != null ? query.toLowerCase(Locale.ROOT) : null;
+        String lowerCategory = categoryFilter != null ? categoryFilter.toLowerCase(Locale.ROOT) : null;
 
         if (typeFilter != null) {
-            String lowerType = typeFilter.toLowerCase();
+            String lowerType = typeFilter.toLowerCase(Locale.ROOT);
             if (!"all".equals(lowerType) && !"furniture".equals(lowerType)
                     && !"doororwindow".equals(lowerType)) {
                 return Response.error("Parameter 'type' must be 'all', 'furniture', "
@@ -62,7 +64,7 @@ public class ListFurnitureCatalogHandler implements CommandHandler, CommandDescr
                 continue;
             }
             if (lowerCategory != null
-                    && !catName.toLowerCase().contains(lowerCategory)) {
+                    && !catName.toLowerCase(Locale.ROOT).contains(lowerCategory)) {
                 continue;
             }
             for (CatalogPieceOfFurniture piece : cat.getFurniture()) {
@@ -71,7 +73,7 @@ public class ListFurnitureCatalogHandler implements CommandHandler, CommandDescr
                     continue;
                 }
                 if (lowerQuery != null
-                        && !pieceName.toLowerCase().contains(lowerQuery)) {
+                        && !pieceName.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
                     continue;
                 }
                 if (typeFilter != null && !"all".equals(typeFilter)) {

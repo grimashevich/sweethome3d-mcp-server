@@ -7,6 +7,7 @@ import com.eteks.sweethome3d.tools.OperatingSystem;
 import com.eteks.sweethome3d.tools.TemporaryURLContent;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.command.util.FormatUtil;
+import com.sh3d.mcp.command.util.HomeFurnitureFactory;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
@@ -98,7 +99,7 @@ public final class ShapeGeneratorSupport {
                 CatalogPieceOfFurniture catalogPiece = new CatalogPieceOfFurniture(
                         null, finalName, null, null, modelContent,
                         fw, fd, fh, 0, true, null, null, true, null, null);
-                HomePieceOfFurniture piece = new HomePieceOfFurniture(catalogPiece);
+                HomePieceOfFurniture piece = HomeFurnitureFactory.create(catalogPiece);
                 piece.setX(posX);
                 piece.setY(posY);
                 piece.setElevation(elevation);

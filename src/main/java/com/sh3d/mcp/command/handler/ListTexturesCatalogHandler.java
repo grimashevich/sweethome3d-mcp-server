@@ -1,4 +1,6 @@
 package com.sh3d.mcp.command.handler;
+
+import java.util.Locale;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 
@@ -38,8 +40,8 @@ public class ListTexturesCatalogHandler implements CommandHandler, CommandDescri
     public Response execute(Request request, HomeAccessor accessor) {
         String query = request.getString("query");
         String categoryFilter = request.getString("category");
-        String lowerQuery = query != null ? query.toLowerCase() : null;
-        String lowerCategory = categoryFilter != null ? categoryFilter.toLowerCase() : null;
+        String lowerQuery = query != null ? query.toLowerCase(Locale.ROOT) : null;
+        String lowerCategory = categoryFilter != null ? categoryFilter.toLowerCase(Locale.ROOT) : null;
 
         TexturesCatalog catalog = accessor.getTexturesCatalog();
         List<Object> results = new ArrayList<>();
@@ -50,7 +52,7 @@ public class ListTexturesCatalogHandler implements CommandHandler, CommandDescri
                 continue;
             }
             if (lowerCategory != null
-                    && !catName.toLowerCase().contains(lowerCategory)) {
+                    && !catName.toLowerCase(Locale.ROOT).contains(lowerCategory)) {
                 continue;
             }
             for (CatalogTexture texture : cat.getTextures()) {
@@ -59,7 +61,7 @@ public class ListTexturesCatalogHandler implements CommandHandler, CommandDescri
                     continue;
                 }
                 if (lowerQuery != null
-                        && !textureName.toLowerCase().contains(lowerQuery)) {
+                        && !textureName.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
                     continue;
                 }
                 Map<String, Object> item = new LinkedHashMap<>();

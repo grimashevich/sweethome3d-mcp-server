@@ -1,4 +1,6 @@
 package com.sh3d.mcp.command.handler;
+
+import java.util.Locale;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.ColorParser;
@@ -133,7 +135,7 @@ public class ModifyLabelHandler implements CommandHandler, CommandDescriptor {
             return null;
         }
         try {
-            return TextStyle.Alignment.valueOf(((String) value).toUpperCase());
+            return TextStyle.Alignment.valueOf(((String) value).toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             return null;
         }

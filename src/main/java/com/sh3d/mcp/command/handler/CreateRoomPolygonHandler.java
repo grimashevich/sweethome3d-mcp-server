@@ -7,6 +7,7 @@ import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.Room;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import static com.sh3d.mcp.command.util.FormatUtil.colorToHex;
@@ -53,6 +54,10 @@ public class CreateRoomPolygonHandler implements CommandHandler, CommandDescript
             @SuppressWarnings("unchecked")
             Map<String, Object> pt = (Map<String, Object>) ptObj;
 
+            String finiteError = ValidationUtil.validateFiniteInputs(pt, "x", "y");
+            if (finiteError != null) {
+                return Response.error("points[" + i + "]: " + finiteError);
+            }
             Object xVal = pt.get("x");
             Object yVal = pt.get("y");
             if (!(xVal instanceof Number) || !(yVal instanceof Number)) {

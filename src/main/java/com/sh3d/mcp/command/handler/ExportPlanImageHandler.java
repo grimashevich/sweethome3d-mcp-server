@@ -75,8 +75,9 @@ public class ExportPlanImageHandler implements CommandHandler, CommandDescriptor
                 Home home = accessor.getHome();
                 // getClipboardImage() requires selected items — select all, render, restore
                 List<Selectable> previousSelection = home.getSelectedItems();
-                home.setSelectedItems(home.getSelectableViewableItems());
+                com.eteks.sweethome3d.model.Level previousLevel = home.getSelectedLevel();
                 try {
+                    home.setSelectedItems(home.getSelectableViewableItems());
                     Object data = transferable.createTransferData(
                             TransferableView.DataType.PLAN_IMAGE);
                     if (data instanceof BufferedImage) {
@@ -84,6 +85,7 @@ public class ExportPlanImageHandler implements CommandHandler, CommandDescriptor
                     }
                     return null;
                 } finally {
+                    home.setSelectedLevel(previousLevel);
                     home.setSelectedItems(previousSelection != null
                             ? previousSelection : Collections.emptyList());
                 }

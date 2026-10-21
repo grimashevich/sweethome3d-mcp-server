@@ -2,9 +2,11 @@ package com.sh3d.mcp.config;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 
 /**
@@ -12,20 +14,23 @@ import java.util.Properties;
  */
 public class PluginConfig {
 
-    public static final String PLUGIN_VERSION = "1.1.0";
+    public static final String PLUGIN_VERSION = "1.2.0";
 
     public static final int DEFAULT_PORT = 9877;
     public static final boolean DEFAULT_AUTO_START = true;
     public static final String DEFAULT_LOG_LEVEL = "INFO";
+    public static final String REQUIRE_TOKEN_PROPERTY = "sh3d.mcp.requireToken";
 
     private final int port;
     private final boolean autoStart;
     private final String logLevel;
+    private final boolean requireToken;
 
-    private PluginConfig(int port, boolean autoStart, String logLevel) {
+    private PluginConfig(int port, boolean autoStart, String logLevel, boolean requireToken) {
         this.port = port;
         this.autoStart = autoStart;
         this.logLevel = logLevel;
+        this.requireToken = requireToken;
     }
 
     /**
@@ -42,7 +47,8 @@ public class PluginConfig {
         boolean autoStart = getBoolean("sh3d.mcp.autoStart", fileProps, DEFAULT_AUTO_START);
         String logLevel = getString("sh3d.mcp.logLevel", fileProps, DEFAULT_LOG_LEVEL);
 
-        return new PluginConfig(port, autoStart, logLevel);
+        boolean requireToken = getBoolean(REQUIRE_TOKEN_PROPERTY, fileProps, false);
+        return new PluginConfig(port, autoStart, logLevel, requireToken);
     }
 
     public int getPort() {
@@ -55,6 +61,38 @@ public class PluginConfig {
 
     public String getLogLevel() {
         return logLevel;
+    }
+
+    /** Whether /mcp requires the bearer token ({@code sh3d.mcp.requireToken}, default false) — contract S, T1. */
+    public boolean isRequireToken() {
+        return requireToken;
+    }
+
+    /** Writes {@code sh3d.mcp.requireToken} to sh3d-mcp.properties, keeping every other key — contract S, T8. */
+    public static synchronized void saveRequireToken(boolean value) throws IOException {
+        Path configPath = resolveConfigPath();
+        if (configPath == null) {
+            throw new IOException("Plugin configuration path is not configured");
+        }
+        Properties props = new Properties();
+        if (Files.exists(configPath)) {
+            // Unlike load(), a failed read must not silently discard the other settings.
+            try (InputStream in = Files.newInputStream(configPath)) {
+                props.load(in);
+            }
+        }
+        props.setProperty(REQUIRE_TOKEN_PROPERTY, Boolean.toString(value));
+        Path dir = configPath.toAbsolutePath().getParent();
+        Files.createDirectories(dir);
+        Path tmp = Files.createTempFile(dir, ".sh3d-mcp-config-", ".tmp");
+        try {
+            try (OutputStream out = Files.newOutputStream(tmp)) {
+                props.store(out, "Sweet Home 3D MCP plugin");
+            }
+            Files.move(tmp, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
     }
 
     /**

@@ -37,6 +37,12 @@ public class ModifyWallHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "xStart", "yStart", "xEnd", "yEnd", "height", "heightAtEnd", "thickness", "arcExtent", "shininess", "leftSideShininess", "rightSideShininess");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         String id = request.getString("id");
         if (id == null) {
             return Response.error("Missing required parameter 'id'");

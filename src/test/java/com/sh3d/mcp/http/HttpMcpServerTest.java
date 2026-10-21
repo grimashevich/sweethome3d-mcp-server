@@ -26,6 +26,9 @@ class HttpMcpServerTest {
         PluginConfig config = mock(PluginConfig.class);
         when(config.getPort()).thenReturn(9877);
         when(config.getTokenPath()).thenReturn(tempDir.resolve("sh3d-mcp.token"));
+        // Contract S (T2/T5): the token is off by default; these tests of the token store and of fail-closed
+        // startup ask for the token-required mode, which is where a token is loaded and required.
+        when(config.isRequireToken()).thenReturn(true);
         CommandRegistry registry = mock(CommandRegistry.class);
         HomeAccessor accessor = mock(HomeAccessor.class);
         server = new HttpMcpServer(config, registry, accessor);
@@ -41,6 +44,8 @@ class HttpMcpServerTest {
         PluginConfig config = mock(PluginConfig.class);
         when(config.getPort()).thenReturn(findFreePort());
         when(config.getTokenPath()).thenReturn(null);
+        // Fail-closed is the token-required mode (T6): with the token off, a null path is not an error.
+        when(config.isRequireToken()).thenReturn(true);
         HttpMcpServer noTokenServer = new HttpMcpServer(config,
                 mock(CommandRegistry.class), mock(HomeAccessor.class));
         assertNull(noTokenServer.getTokenStore());

@@ -83,14 +83,15 @@ public class ExportSvgHandler implements CommandHandler, CommandDescriptor {
         return "Exports the current 2D floor plan as SVG (Scalable Vector Graphics). "
                 + "Returns the SVG content as a string. Shows walls, furniture, rooms, labels, "
                 + "and dimension lines exactly as they appear in the plan view. "
-                + "If filePath is provided, saves the SVG to disk and returns only metadata.";
+                + "If filePath is provided, saves the SVG to disk and returns only metadata. "
+                + "Use filePath for scenes with more than a few objects to avoid a large SVG in the response.";
     }
 
     @Override
     public Map<String, Object> getSchema() {
         return SchemaBuilder.create()
                 .string("filePath",
-                        "Absolute path to save the SVG file. Extension is auto-corrected to .svg. "
+                        "Recommended for large scenes: use filePath to save the SVG file. Absolute path. Extension is auto-corrected to .svg. "
                                 + "If provided, returns metadata only (no SVG content in response).")
                 .build();
     }

@@ -6,6 +6,7 @@ import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import static com.sh3d.mcp.command.util.FormatUtil.round2;
@@ -22,6 +23,12 @@ public class CreateWallHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "xStart", "yStart", "xEnd", "yEnd", "thickness", "height");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         float xStart = request.getFloat("xStart");
         float yStart = request.getFloat("yStart");
         float xEnd = request.getFloat("xEnd");
@@ -71,6 +78,7 @@ public class CreateWallHandler implements CommandHandler, CommandDescriptor {
         return "Creates a single wall between two points in Sweet Home 3D. "
                 + "Coordinates are in centimeters (e.g., 500 = 5 meters). "
                 + "X points right, Y points down. "
+                + "Omitting height or setting it to 0 uses the home's default wall height (normally 250 cm), not the level height. "
                 + "Returns the wall ID for use with connect_walls, delete_wall, modify_wall.";
     }
 
@@ -82,7 +90,7 @@ public class CreateWallHandler implements CommandHandler, CommandDescriptor {
                 .requiredNumber("xEnd", "X coordinate of wall end point in cm")
                 .requiredNumber("yEnd", "Y coordinate of wall end point in cm")
                 .numberWithDefault("thickness", "Wall thickness in cm", 10)
-                .numberWithDefault("height", "Wall height in cm (0 = use home default or 250)", 0)
+                .numberWithDefault("height", "Wall height in cm (0 or omitted = home default, normally 250)", 0)
                 .build();
     }
 

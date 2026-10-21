@@ -2,8 +2,7 @@
   "mcpServers": {
     "sweethome3d": {
       "type": "http",
-      "url": "http://127.0.0.1:9877/mcp",
-      "headersHelper": "printf '{\"Authorization\":\"Bearer %s\"}' \"$(cat \"$HOME/Library/Application Support/eTeks/Sweet Home 3D/plugins/sh3d-mcp.token\")\""
+      "url": "http://127.0.0.1:9877/mcp"
     }
   }
 }

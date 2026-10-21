@@ -1,8 +1,8 @@
 # Sweet Home 3D MCP Plugin
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE)
-[![Java 11+](https://img.shields.io/badge/Java-11%2B-orange.svg)](https://adoptium.net/)
-[![Sweet Home 3D 6.0+](https://img.shields.io/badge/Sweet_Home_3D-6.0%2B-green.svg)](https://www.sweethome3d.com/)
+[![Java 8+](https://img.shields.io/badge/Java-8%2B-orange.svg)](https://adoptium.net/)
+[![Sweet Home 3D 7.x](https://img.shields.io/badge/Sweet_Home_3D-7.x-green.svg)](https://www.sweethome3d.com/)
 
 A plugin for [Sweet Home 3D](https://www.sweethome3d.com/) that embeds an MCP (Model Context Protocol) server directly inside the application. Lets Claude and other AI assistants control Sweet Home 3D over HTTP — create walls, place furniture, render photos, and more — without any external proxy or separate server process.
 
@@ -30,15 +30,15 @@ between — see [Claude Configuration](#claude-configuration).
 
 | Requirement | Version |
 |-------------|---------|
-| [Sweet Home 3D](https://www.sweethome3d.com/download.jsp) | 6.0 or newer |
-| Java (bundled with SH3D or system) | 11 or newer |
+| [Sweet Home 3D](https://www.sweethome3d.com/download.jsp) | 7.x (tested with 7.5) |
+| Java (bundled with SH3D or system) | 8 or newer |
 | [Node.js](https://nodejs.org/) | current LTS — only for Claude Desktop (runs the `mcp-remote` bridge) |
 
-> **Note:** Sweet Home 3D ships with a bundled JRE. Make sure it is Java 11+. Very old SH3D builds (32-bit Windows installer with JRE 1.8) will silently fail to load the plugin due to `UnsupportedClassVersionError`.
+The plugin works with Sweet Home 3D's bundled Java 8 runtime. Building the plugin requires JDK 11+; running it does not.
 
 ## Installation
 
-**Step 1.** Download the latest `.sh3p` file from [Releases](../../releases).
+**Step 1.** Download `sh3d-mcp-plugin-1.2.0.sh3p` from [Releases](../../releases).
 
 **Step 2.** Install it.
 
@@ -76,9 +76,21 @@ instead of the Mac App Store version.
 
 ## Authentication
 
-Every request to `/mcp` must carry `Authorization: Bearer <token>`. On first start the plugin
-generates a random token (32 bytes, base64url) and stores it next to the plugin, readable only by
-you (`0600` where the OS supports it):
+Token authentication is **off by default**. In this mode clients connect without an
+`Authorization` header, and the plugin creates no token files or changes to existing token files.
+**Any program running on this machine can control Sweet Home 3D through the MCP endpoint, including writing files with the permissions of Sweet Home 3D.**
+Enable token authentication if untrusted programs or other users share the machine.
+
+To require authentication, select **Require a token** in **Tools → MCP Server...**. The change takes
+effect on the next request, including requests in existing sessions, without restarting the server.
+The setting is saved as `sh3d.mcp.requireToken=true` in `sh3d-mcp.properties` in the plugins folder.
+The JVM property `-Dsh3d.mcp.requireToken=true|false` overrides that file and locks the checkbox.
+Clear the checkbox to allow connections without a token again; existing token files are left in place.
+
+When authentication is enabled, every request to `/mcp` must carry `Authorization: Bearer <token>`;
+a missing or incorrect token returns `401`. `/health` does not require a token.
+The plugin generates a random token (32 bytes, base64url) when needed and stores it next to the
+plugin, readable only by you (`0600` on POSIX, an explicit owner-only ACL on Windows):
 
 | File | Contents |
 |------|----------|
@@ -86,11 +98,20 @@ you (`0600` where the OS supports it):
 | `sh3d-mcp.token.headers` | `Authorization: Bearer <token>` (for `mcp-remote --header-file`) |
 
 Both live in the plugins folder listed above. **Tools → MCP Server...** shows the token (masked),
-lets you copy it, and lets you **rotate** it; clients using the old token then get `401`.
+lets you copy it, and lets you **rotate** it when authentication is enabled; clients using the
+old token then get `401`. If token storage is unavailable, enabling authentication fails, and a
+server configured to require a token refuses to start. Token values are never written to logs or
+client configuration files.
 
-The server also rejects (`403`) any request whose `Host` is not `127.0.0.1:<port>` or
+With authentication enabled, configure Claude Code using `headersHelper` or `--header`, and
+Claude Desktop using `mcp-remote --header-file`, as shown below.
+
+**Host/Origin checks apply in both modes**, to `/mcp` and `/health`. The server listens only on
+`127.0.0.1` and rejects (`403`) any request whose `Host` is not `127.0.0.1:<port>` or
 `localhost:<port>`, or that carries an `Origin` other than `http://127.0.0.1:<port>` /
 `http://localhost:<port>` (DNS-rebinding and cross-site protection). No CORS headers are sent.
+Host and Origin comparisons ignore case; repeated or comma-separated values are rejected.
+On port 80, the same addresses without `:80` are also accepted.
 Request bodies are limited to 5 MB (`413`).
 
 ## Claude Configuration
@@ -99,9 +120,16 @@ Start Sweet Home 3D first: the MCP server exists only while the application is r
 
 ### Claude Code (recommended)
 
-Create `.mcp.json` in your project directory. `headersHelper` reads the token file on every
-connect, so the token is never copied into the config and a rotation is picked up automatically
-(macOS path shown; adjust for your OS):
+With the default token-free mode, copy `.mcp.json.example` to `.mcp.json` in your project directory,
+or register the endpoint with:
+
+```bash
+claude mcp add --transport http sweethome3d http://127.0.0.1:9877/mcp
+```
+
+**When token authentication is enabled**, use the following `.mcp.json`. `headersHelper` reads the
+token file on every connect, so the token is never copied into the config and a rotation is picked
+up automatically (macOS path shown; adjust for your OS):
 
 ```json
 {
@@ -127,8 +155,22 @@ claude mcp add --transport http sweethome3d http://127.0.0.1:9877/mcp \
 Claude Desktop does not load `"type": "http"` entries from `claude_desktop_config.json` — such an entry is ignored.
 It starts MCP servers as local commands, so the plugin is reached through a pinned
 [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge (requires [Node.js](https://nodejs.org/)).
-The token is read from the headers file, so it never appears in the config or on the process command line.
-Add this to `claude_desktop_config.json` (macOS path shown):
+In the default token-free mode, add this to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "sweethome3d": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@0.14.3", "http://127.0.0.1:9877/mcp"]
+    }
+  }
+}
+```
+
+**When token authentication is enabled**, add `--header-file` and the absolute path to the headers
+file as below (macOS path shown). The token is read from that file and never appears in the config
+or on the process command line:
 
 ```json
 {
@@ -147,8 +189,9 @@ Add this to `claude_desktop_config.json` (macOS path shown):
 Then quit Claude Desktop completely and start it again.
 
 > The built-in **"Auto-configure Claude Desktop"** button in **Tools → MCP Server...** writes this
-> entry with the correct path (and keeps a `.bak` copy of the previous config). Restart Claude Desktop
-> after rotating the token.
+> entry for the current token mode, including the headers path only when authentication is enabled
+> (and keeps a `.bak` copy of the previous config). The **Copy to Clipboard** button uses the same mode.
+> Configure the client again after changing token mode, and restart Claude Desktop after rotating the token.
 
 ## Available Commands
 
@@ -236,7 +279,7 @@ Then quit Claude Desktop completely and start it again.
 | Command | Description |
 |---------|-------------|
 | `add_level` | Add a new level (floor/storey) |
-| `list_levels` | List all levels; shows which is currently selected |
+| `list_levels` | List all levels with stable string `id`, zero-based `index`, and current selection |
 | `set_selected_level` | Switch the active level |
 | `delete_level` | Delete a level and all its objects |
 
@@ -254,13 +297,13 @@ Then quit Claude Desktop completely and start it again.
 | Command | Description |
 |---------|-------------|
 | `save_home` | Save the scene to a `.sh3d` file |
-| `load_home` | Load a `.sh3d` file, replacing the current scene |
+| `load_home` | Load a `.sh3d` file containing `Home.xml`, replacing the current scene |
 
 ### Checkpoints (undo timeline)
 
 | Command | Description |
 |---------|-------------|
-| `checkpoint` | Save an in-memory snapshot (optional description) |
+| `checkpoint` | Save an in-memory snapshot with a stable, never-reused numeric ID (optional description) |
 | `restore_checkpoint` | Restore from a snapshot (supports force mode) |
 | `list_checkpoints` | List all snapshots with the current undo cursor position |
 
@@ -270,6 +313,10 @@ Then quit Claude Desktop completely and start it again.
 |---------|-------------|
 | `batch_commands` | Execute multiple commands in one request |
 
+Files saved by plugin 1.1.0 or earlier, and by Sweet Home 3D versions before 5.3,
+must be opened and saved again in Sweet Home 3D before `load_home` can read them.
+See the [1.2.0 upgrade notes](CHANGELOG.md#upgrade-notes).
+
 ## Coordinate System
 
 - Units: **centimeters** (500 = 5 meters)
@@ -278,7 +325,7 @@ Then quit Claude Desktop completely and start it again.
 
 ## Building from Source
 
-**Prerequisites:** Java 11+, Maven 3.6+ (or use the included `mvnw` wrapper).
+**Prerequisites:** JDK 11+ for building and tests, Maven 3.9+ (or use the included `mvnw` wrapper).
 
 ```bash
 # 1. Clone
@@ -296,7 +343,7 @@ cd sweethome3d-mcp-server
 ./mvnw test
 
 # The plugin artifact is at:
-# target/sh3d-mcp-plugin-1.0.0.sh3p
+# target/sh3d-mcp-plugin-1.2.0.sh3p
 ```
 
 > **Why the setup script?** `SweetHome3D.jar` is a 46 MB binary excluded from git.
@@ -309,52 +356,84 @@ cd sweethome3d-mcp-server
 The plugin is a single self-contained component with no external runtime dependencies:
 
 - **`plugin`** — Entry point (`SH3DMcpPlugin`), settings dialog
-- **`http`** — Streamable HTTP MCP server (JSON-RPC 2.0, port 9877)
-- **`command`** — 46 command handlers, auto-registered via `CommandRegistry`
+- **`http`** — Streamable HTTP MCP server (JSON-RPC 2.0, port 9877), `RequestGuard` filter
+- **`command`** — registry and interfaces; 46 handlers in `command.handler`, generators in `command.shape`, shared helpers in `command.util`
 - **`bridge`** — Thread-safe Sweet Home 3D API wrapper (`HomeAccessor` via EDT, `CheckpointManager`, `ObjectResolver`)
 - **`protocol`** — Hand-written JSON parser (zero external dependencies)
-- **`config`** — Plugin settings, Claude Desktop auto-configurator
+- **`config`** — Plugin settings, `AuthTokenStore`, Claude Desktop auto-configurator
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design, ADR decisions, and sequence diagrams.
 
 ## Adding a New Command
 
-One class is all it takes — the registry picks it up automatically:
+Create `src/main/java/com/sh3d/mcp/command/handler/MyCommandHandler.java`:
 
 ```java
-public class MyCommandHandler implements CommandHandler, CommandDescriptor {
+package com.sh3d.mcp.command.handler;
 
+import com.sh3d.mcp.bridge.HomeAccessor;
+import com.sh3d.mcp.command.CommandDescriptor;
+import com.sh3d.mcp.command.CommandHandler;
+import com.sh3d.mcp.command.util.SchemaBuilder;
+import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.protocol.Response;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class MyCommandHandler implements CommandHandler, CommandDescriptor {
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
-        // All Home mutations must run on the Event Dispatch Thread:
-        Object result = accessor.runOnEDT(() -> {
-            Home home = accessor.getHome();
-            // ... do something
-            return "done";
+        String name = request.getString("name");
+        if (name == null || name.trim().isEmpty()) {
+            return Response.error("Missing or empty parameter: name");
+        }
+
+        Map<String, Object> data = accessor.runOnEDT(() -> {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("name", name);
+            result.put("wallCount", accessor.getHome().getWalls().size());
+            return result;
         });
-        return Response.success(result);
+        return Response.ok(data);
     }
 
     @Override
-    public String getDescription() { return "Does something useful."; }
+    public String getDescription() {
+        return "Returns a name and the current wall count.";
+    }
 
     @Override
     public Map<String, Object> getSchema() {
-        return SchemaBuilder.object()
-            .prop("name", "string", "Object name")
-            .required("name")
-            .build();
+        return SchemaBuilder.create()
+                .requiredString("name", "Name to include in the result (non-empty)")
+                .build();
     }
 }
 ```
 
-Then register it in `SH3DMcpPlugin.createCommandRegistry()`:
+Then import the handler and register it in `SH3DMcpPlugin.createCommandRegistry()`:
 
 ```java
 registry.register("my_command", new MyCommandHandler());
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
+
+## Contributors
+
+Code contributions:
+
+- Daniel Whitston ([@danwhitston](https://github.com/danwhitston)) — door/window placement and sash controls ([PR #4](../../pull/4), [PR #5](../../pull/5)).
+- Rolfy N. Montufar ([@rolfymontufar](https://github.com/rolfymontufar)) — dimension line editing and deletion ([PR #6](../../pull/6)).
+- Oskar Lindh ([@Olindh](https://github.com/Olindh)) — security fixes for HTTP requests and home-file loading.
+- [@SharonSx](https://github.com/SharonSx) — label editing and deletion ([PR #14](../../pull/14)).
+
+Thank you for detailed bug reports:
+
+- [@ikeoffiah](https://github.com/ikeoffiah) — [#9](../../issues/9), [#10](../../issues/10), [#11](../../issues/11).
+- [@jacktwilliams](https://github.com/jacktwilliams) — [#13](../../issues/13).
+- [@arkansas-coder](https://github.com/arkansas-coder) — [#7](../../issues/7).
 
 ## License
 

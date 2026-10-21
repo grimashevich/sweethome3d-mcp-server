@@ -1,5 +1,7 @@
 package com.sh3d.mcp.bridge;
 
+import java.util.Locale;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -92,10 +94,10 @@ public final class PathValidator {
         }
 
         String pathStr = path.toString();
-        String pathLower = pathStr.toLowerCase();
+        String pathLower = pathStr.toLowerCase(Locale.ROOT);
 
         for (String ext : allowedExtensions) {
-            if (pathLower.endsWith(ext.toLowerCase())) {
+            if (pathLower.endsWith(ext.toLowerCase(Locale.ROOT))) {
                 return path;
             }
         }
@@ -117,16 +119,16 @@ public final class PathValidator {
      */
     public static Path replaceExtension(Path path, String newExtension, String... oldExtensions) {
         String pathStr = path.toString();
-        String pathLower = pathStr.toLowerCase();
+        String pathLower = pathStr.toLowerCase(Locale.ROOT);
 
         // Check if it already has the desired extension
-        if (pathLower.endsWith(newExtension.toLowerCase())) {
+        if (pathLower.endsWith(newExtension.toLowerCase(Locale.ROOT))) {
             return path;
         }
 
         // Check for old extensions to replace
         for (String oldExt : oldExtensions) {
-            if (pathLower.endsWith(oldExt.toLowerCase())) {
+            if (pathLower.endsWith(oldExt.toLowerCase(Locale.ROOT))) {
                 String withoutOld = pathStr.substring(0, pathStr.length() - oldExt.length());
                 return Paths.get(withoutOld + newExtension);
             }

@@ -1,4 +1,6 @@
 package com.sh3d.mcp.command.handler;
+
+import java.util.Locale;
 import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 
@@ -188,7 +190,7 @@ public class ExportToObjHandler implements CommandHandler, CommandDescriptor {
                 if (item instanceof HomePieceOfFurniture) {
                     writer.writeNode(node);
                 } else if (!(item instanceof DimensionLine)) {
-                    String name = item.getClass().getSimpleName().toLowerCase() + "_" + (++counter);
+                    String name = item.getClass().getSimpleName().toLowerCase(Locale.ROOT) + "_" + (++counter);
                     writer.writeNode(node, name);
                 }
             }

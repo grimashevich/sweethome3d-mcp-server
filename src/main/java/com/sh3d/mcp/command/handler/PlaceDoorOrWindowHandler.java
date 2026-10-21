@@ -3,6 +3,7 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.CatalogSearchUtil;
+import com.sh3d.mcp.command.util.HomeFurnitureFactory;
 import com.sh3d.mcp.command.util.SashUtil;
 
 import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
@@ -14,6 +15,7 @@ import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.bridge.ObjectResolver;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
@@ -39,6 +41,12 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "position", "elevation");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         // --- Validate name or catalogId ---
         String name = request.getString("name");
         String catalogId = request.getString("catalogId");
@@ -109,9 +117,7 @@ public class PlaceDoorOrWindowHandler implements CommandHandler, CommandDescript
             float y = point[1];
             float angle = point[2];
 
-            HomePieceOfFurniture piece = (found instanceof CatalogDoorOrWindow)
-                    ? new HomeDoorOrWindow((CatalogDoorOrWindow) found)
-                    : new HomePieceOfFurniture(found);
+            HomePieceOfFurniture piece = HomeFurnitureFactory.create(found);
             float wallThickness = wall.getThickness();
             piece.setAngle(angle);
             if (piece instanceof HomeDoorOrWindow && hasFrameMetadata((HomeDoorOrWindow) piece)) {

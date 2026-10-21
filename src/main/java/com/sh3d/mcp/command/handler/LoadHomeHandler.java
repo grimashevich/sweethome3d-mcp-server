@@ -3,11 +3,18 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 
 import com.eteks.sweethome3d.model.Compass;
+import com.eteks.sweethome3d.model.DimensionLine;
+import com.eteks.sweethome3d.model.Elevatable;
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomeEnvironment;
+import com.eteks.sweethome3d.model.HomePieceOfFurniture;
+import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.Level;
 import com.eteks.sweethome3d.model.ObserverCamera;
+import com.eteks.sweethome3d.model.Polyline;
 import com.eteks.sweethome3d.model.RecorderException;
+import com.eteks.sweethome3d.model.Room;
+import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.bridge.HomeCleaner;
 import com.sh3d.mcp.protocol.Request;
@@ -19,8 +26,12 @@ import com.sh3d.mcp.command.util.SchemaBuilder;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 /**
@@ -33,7 +44,7 @@ import java.util.logging.Logger;
  *   filePath (required) — абсолютный путь к .sh3d файлу.
  * Возвращает:
  *   filePath — абсолютный путь к загруженному файлу
- *   walls, rooms, furniture, labels, dimensionLines, levels, polylines, storedCameras — количество объектов
+ *   levels, walls, rooms, furniture, labels, dimensionLines, polylines, storedCameras — количество объектов
  * </pre>
  */
 public class LoadHomeHandler implements CommandHandler, CommandDescriptor {
@@ -79,60 +90,20 @@ public class LoadHomeHandler implements CommandHandler, CommandDescriptor {
             return Response.error("Load failed: " + e.getMessage());
         }
 
-        // 5. Очистка + копирование на EDT
+        // 5. Замена сцены на EDT
         Map<String, Object> data = accessor.runOnEDT(() -> {
             Home home = accessor.getHome();
 
-            // --- CLEAR ---
-            clearAll(home);
-
-            // --- POPULATE ---
-            int levels = addAll(home, loaded.getLevels(), home::addLevel);
-            int walls = addAll(home, loaded.getWalls(), home::addWall);
-            int rooms = addAll(home, loaded.getRooms(), home::addRoom);
-            int furniture = addAll(home, loaded.getFurniture(),
-                    home::addPieceOfFurniture);
-            int labels = addAll(home, loaded.getLabels(), home::addLabel);
-            int dimensionLines = addAll(home, loaded.getDimensionLines(),
-                    home::addDimensionLine);
-            int polylines = addAll(home, loaded.getPolylines(), home::addPolyline);
-
-            // --- Camera ---
-            copyCameras(home, loaded);
-
-            // --- Stored cameras ---
-            home.setStoredCameras(loaded.getStoredCameras());
-
-            // --- Environment ---
-            copyEnvironment(home.getEnvironment(), loaded.getEnvironment());
-
-            // --- Compass ---
-            copyCompass(home.getCompass(), loaded.getCompass());
-
-            // --- Background image ---
-            home.setBackgroundImage(loaded.getBackgroundImage());
+            Map<String, Object> counts = replaceScene(home, loaded);
 
             // --- Metadata ---
             home.setName(normalizedPath);
             home.setModified(false);
-            home.setBasePlanLocked(loaded.isBasePlanLocked());
-
-            // --- Selected level ---
-            Level selectedLevel = loaded.getSelectedLevel();
-            if (selectedLevel != null) {
-                home.setSelectedLevel(selectedLevel);
-            }
 
             // --- Response ---
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("filePath", normalizedPath);
-            result.put("levels", levels);
-            result.put("walls", walls);
-            result.put("rooms", rooms);
-            result.put("furniture", furniture);
-            result.put("labels", labels);
-            result.put("dimensionLines", dimensionLines);
-            result.put("polylines", polylines);
+            result.putAll(counts);
             result.put("storedCameras", loaded.getStoredCameras().size());
             return result;
         });
@@ -141,19 +112,103 @@ public class LoadHomeHandler implements CommandHandler, CommandDescriptor {
         return Response.ok(data);
     }
 
+    // --- Replace scene ---
+
+    /**
+     * Заменяет содержимое сцены {@code home} содержимым {@code source}: уровни, объекты, выбранный
+     * уровень, камеры, окружение, компас, фон. Общий код команд load_home и restore_checkpoint.
+     * <p>
+     * В сцену уходит копия {@code source} (идентификаторы объектов и уровней, связи стен и состав
+     * групп {@link Home#clone()} сохраняет), сам {@code source} не меняется. Это важно для
+     * restore_checkpoint: снимок контрольной точки применяется много раз, и ни восстановление,
+     * ни последующие правки сцены не должны до него дотягиваться.
+     * <p>
+     * Вызывать в EDT.
+     *
+     * @return счётчики объектов в порядке полей ответа: levels, walls, rooms, furniture, labels,
+     *         dimensionLines, polylines
+     */
+    static Map<String, Object> replaceScene(Home home, Home source) {
+        Home copy = source.clone();
+
+        // --- CLEAR ---
+        clearAll(home);
+
+        // --- POPULATE ---
+        int levels = addAll(copy.getLevels(), home::addLevel);
+        int walls = addAll(copy.getWalls(), home::addWall, Wall::setLevel);
+        int rooms = addAll(copy.getRooms(), home::addRoom, Room::setLevel);
+        int furniture = addAll(copy.getFurniture(), home::addPieceOfFurniture,
+                HomePieceOfFurniture::setLevel);
+        int labels = addAll(copy.getLabels(), home::addLabel, Label::setLevel);
+        int dimensionLines = addAll(copy.getDimensionLines(), home::addDimensionLine,
+                DimensionLine::setLevel);
+        int polylines = addAll(copy.getPolylines(), home::addPolyline, Polyline::setLevel);
+
+        // --- Selected level ---
+        // Раньше камер: в приложении смена выбранного уровня сдвигает камеру наблюдателя по высоте.
+        // Без проверки на null: дом с уровнями, где ни один не выбран, тоже надо повторить точно.
+        home.setSelectedLevel(copy.getSelectedLevel());
+
+        // --- Camera ---
+        copyCameras(home, copy);
+
+        // --- Stored cameras ---
+        home.setStoredCameras(copy.getStoredCameras());
+
+        // --- Environment ---
+        copyEnvironment(home.getEnvironment(), copy.getEnvironment());
+
+        // --- Compass ---
+        copyCompass(home.getCompass(), copy.getCompass());
+
+        // --- Background image ---
+        home.setBackgroundImage(copy.getBackgroundImage());
+
+        // --- Metadata ---
+        home.setBasePlanLocked(copy.isBasePlanLocked());
+
+        Map<String, Object> counts = new LinkedHashMap<>();
+        counts.put("levels", levels);
+        counts.put("walls", walls);
+        counts.put("rooms", rooms);
+        counts.put("furniture", furniture);
+        counts.put("labels", labels);
+        counts.put("dimensionLines", dimensionLines);
+        counts.put("polylines", polylines);
+        return counts;
+    }
+
     // --- Clear ---
 
     static void clearAll(Home home) {
         HomeCleaner.clearAll(home);
     }
 
-    // --- Add helper ---
+    // --- Add helpers ---
 
-    static <T> int addAll(Home home, java.util.Collection<T> items,
-                          java.util.function.Consumer<T> adder) {
+    static <T> int addAll(Collection<T> items, Consumer<T> adder) {
         int count = 0;
-        for (T item : items) {
+        for (T item : new ArrayList<>(items)) {
             adder.accept(item);
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * Добавляет объекты в сцену, оставляя каждый на его уровне. {@code Home.addWall()} и остальные
+     * {@code add*} сами ставят добавляемому объекту выбранный сейчас уровень дома (а в приложении
+     * выбранным становится каждый только что добавленный уровень), поэтому уровень объекта
+     * запоминается до добавления и возвращается после. Группа мебели передаёт уровень своим предметам.
+     */
+    static <T extends Elevatable> int addAll(Collection<T> items, Consumer<T> adder,
+                                             BiConsumer<T, Level> levelSetter) {
+        int count = 0;
+        for (T item : new ArrayList<>(items)) {
+            Level level = item.getLevel();
+            adder.accept(item);
+            levelSetter.accept(item, level);
             count++;
         }
         return count;

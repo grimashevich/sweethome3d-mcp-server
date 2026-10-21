@@ -268,7 +268,8 @@ class CheckpointManagerTest {
         SnapshotInfo info = manager.push(newHome, "cp-new");
 
         assertEquals(3, manager.size());
-        assertEquals(2, info.getId());
+        // id 2 был выдан усечённой точке cp-2 и другой точке не выдаётся
+        assertEquals(3, info.getId());
         assertEquals(2, manager.getCursor());
     }
 
@@ -453,7 +454,8 @@ class CheckpointManagerTest {
 
         SnapshotInfo info = manager.push(new Home(), "fresh");
 
-        assertEquals(0, info.getId());
+        // Номер контрольной точки не выдаётся повторно и после clear
+        assertEquals(1, info.getId());
         assertEquals(1, manager.size());
         assertEquals(0, manager.getCursor());
     }
@@ -558,7 +560,8 @@ class CheckpointManagerTest {
 
         assertEquals(2, manager.size()); // cp-0 + cp-new
         assertEquals(1, manager.getCursor());
-        assertEquals(1, info.getId());
+        // Номера 1 и 2 выданы усечённым точкам, новая получает следующий номер
+        assertEquals(3, info.getId());
         assertEquals("new direction", info.getDescription());
 
         // Verify timeline contents

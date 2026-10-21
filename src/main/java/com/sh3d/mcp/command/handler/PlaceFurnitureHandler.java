@@ -3,13 +3,13 @@ import com.sh3d.mcp.command.CommandHandler;
 import com.sh3d.mcp.command.CommandDescriptor;
 import com.sh3d.mcp.command.util.FormatUtil;
 import com.sh3d.mcp.command.util.CatalogSearchUtil;
+import com.sh3d.mcp.command.util.HomeFurnitureFactory;
 
-import com.eteks.sweethome3d.model.CatalogDoorOrWindow;
 import com.eteks.sweethome3d.model.CatalogPieceOfFurniture;
-import com.eteks.sweethome3d.model.HomeDoorOrWindow;
 import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
@@ -29,6 +29,12 @@ public class PlaceFurnitureHandler implements CommandHandler, CommandDescriptor 
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "x", "y", "angle", "elevation");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         String name = request.getString("name");
         String catalogId = request.getString("catalogId");
 
@@ -65,9 +71,7 @@ public class PlaceFurnitureHandler implements CommandHandler, CommandDescriptor 
 
         // Ответ строится на EDT: чтение модели — только там (ADR-003)
         Map<String, Object> data = accessor.runOnEDT(() -> {
-            HomePieceOfFurniture piece = (found instanceof CatalogDoorOrWindow)
-                    ? new HomeDoorOrWindow((CatalogDoorOrWindow) found)
-                    : new HomePieceOfFurniture(found);
+            HomePieceOfFurniture piece = HomeFurnitureFactory.create(found);
             piece.setX(x);
             piece.setY(y);
             piece.setAngle(angleRad);

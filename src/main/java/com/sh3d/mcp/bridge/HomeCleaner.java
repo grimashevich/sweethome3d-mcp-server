@@ -98,7 +98,7 @@ public final class HomeCleaner {
     private static <T> int deleteAll(Home home,
                                      java.util.Collection<T> items,
                                      java.util.function.Consumer<T> deleter) {
-        var copy = new ArrayList<>(items);
+        ArrayList<T> copy = new ArrayList<>(items);
         for (T item : copy) {
             deleter.accept(item);
         }

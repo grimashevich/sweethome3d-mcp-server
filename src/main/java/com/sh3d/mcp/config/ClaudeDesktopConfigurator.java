@@ -56,8 +56,9 @@ public class ClaudeDesktopConfigurator {
      * Claude Desktop не поддерживает "type": "http" напрямую —
      * используется npx mcp-remote как stdio-мост к HTTP endpoint.
      */
-    public static String generateMcpJson(int port) {
-        Map<String, Object> serverEntry = buildServerEntry(port);
+    /** Claude Desktop entry for the given port and token mode — contract S, A1. */
+    public static String generateMcpJson(int port, boolean requireToken) {
+        Map<String, Object> serverEntry = buildServerEntry(port, requireToken);
 
         Map<String, Object> servers = new LinkedHashMap<>();
         servers.put("sweethome3d", serverEntry);
@@ -68,6 +69,11 @@ public class ClaudeDesktopConfigurator {
         return JsonUtil.serializePretty(root);
     }
 
+    /** Compatibility overload for clients that already use bearer-token authentication. */
+    public static String generateMcpJson(int port) {
+        return generateMcpJson(port, true);
+    }
+
     /**
      * mcp-remote is pinned: an unpinned {@code npx -y} would fetch whatever is latest on npm at
      * every Claude Desktop start. The bearer token is passed via {@code --header-file} so it never
@@ -75,15 +81,18 @@ public class ClaudeDesktopConfigurator {
      */
     static final String MCP_REMOTE_PACKAGE = "mcp-remote@0.14.3";
 
-    private static Map<String, Object> buildServerEntry(int port) {
+    private static Map<String, Object> buildServerEntry(int port, boolean requireToken) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("command", "npx");
         List<Object> args = new ArrayList<>(Arrays.asList(
                 "-y", MCP_REMOTE_PACKAGE, "http://127.0.0.1:" + port + "/mcp"));
-        Path tokenPath = PluginConfig.resolveTokenPath();
-        if (tokenPath != null) {
+        if (requireToken) {
+            Path tokenPath = PluginConfig.resolveTokenPath();
+            if (tokenPath == null) {
+                throw new IllegalStateException("Token path is not configured");
+            }
             args.add("--header-file");
-            args.add(AuthTokenStore.headersPathFor(tokenPath).toString());
+            args.add(AuthTokenStore.headersPathFor(tokenPath).toAbsolutePath().toString());
         }
         entry.put("args", args);
         return entry;
@@ -93,8 +102,13 @@ public class ClaudeDesktopConfigurator {
      * Мержит MCP-конфиг в claude_desktop_config.json.
      * Создаёт .bak бэкап перед модификацией.
      */
-    @SuppressWarnings("unchecked")
     public static ConfigureResult configure(int port) throws IOException {
+        return configure(port, true);
+    }
+
+    /** Merges the entry for the given port and token mode, keeping the backup and foreign entries. */
+    @SuppressWarnings("unchecked")
+    public static ConfigureResult configure(int port, boolean requireToken) throws IOException {
         Path configPath = resolveConfigPath();
         if (configPath == null) {
             throw new IOException("Cannot determine Claude Desktop config directory");
@@ -139,7 +153,7 @@ public class ClaudeDesktopConfigurator {
             root.put("mcpServers", mcpServers);
         }
 
-        mcpServers.put("sweethome3d", buildServerEntry(port));
+        mcpServers.put("sweethome3d", buildServerEntry(port, requireToken));
 
         // Записать
         String prettyJson = JsonUtil.serializePretty(root);

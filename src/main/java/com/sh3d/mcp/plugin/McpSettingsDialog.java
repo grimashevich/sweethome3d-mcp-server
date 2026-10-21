@@ -2,6 +2,7 @@ package com.sh3d.mcp.plugin;
 
 import com.sh3d.mcp.config.AuthTokenStore;
 import com.sh3d.mcp.config.ClaudeDesktopConfigurator;
+import com.sh3d.mcp.config.PluginConfig;
 import com.sh3d.mcp.http.HttpMcpServer;
 import com.sh3d.mcp.server.ServerState;
 
@@ -52,6 +53,8 @@ public class McpSettingsDialog extends JDialog {
     private JPasswordField tokenField;
     private JButton copyTokenButton;
     private JButton rotateTokenButton;
+    private JCheckBox requireTokenCheckBox;
+    private JLabel tokenLabel;
 
     public McpSettingsDialog(Frame owner, HttpMcpServer httpServer, ResourceBundle bundle) {
         super(owner, bundle.getString("dialog.title"), false);
@@ -117,6 +120,10 @@ public class McpSettingsDialog extends JDialog {
         copyTokenButton.addActionListener(e -> onCopyToken());
         rotateTokenButton = new JButton(bundle.getString("dialog.button.rotateToken"));
         rotateTokenButton.addActionListener(e -> onRotateToken());
+        requireTokenCheckBox = new JCheckBox(bundle.getString("dialog.token.require"), httpServer.isRequireToken());
+        requireTokenCheckBox.setEnabled(System.getProperty(PluginConfig.REQUIRE_TOKEN_PROPERTY) == null);
+        requireTokenCheckBox.addActionListener(e -> onRequireTokenChanged());
+        tokenLabel = new JLabel(bundle.getString("dialog.token.label"));
         updateTokenField();
     }
 
@@ -156,9 +163,14 @@ public class McpSettingsDialog extends JDialog {
         gbc.gridx = 2;
         serverPanel.add(toggleButton, gbc);
 
-        // Token row
+        // Token mode
         gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE;
-        serverPanel.add(new JLabel(bundle.getString("dialog.token.label")), gbc);
+        gbc.gridwidth = 3;
+        serverPanel.add(requireTokenCheckBox, gbc);
+
+        // Token row
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1;
+        serverPanel.add(tokenLabel, gbc);
         gbc.gridx = 1;
         serverPanel.add(tokenField, gbc);
         gbc.gridx = 2;
@@ -398,7 +410,7 @@ public class McpSettingsDialog extends JDialog {
     }
 
     private void updateJsonArea() {
-        jsonArea.setText(ClaudeDesktopConfigurator.generateMcpJson(getDisplayPort()));
+        jsonArea.setText(ClaudeDesktopConfigurator.generateMcpJson(getDisplayPort(), httpServer.isRequireToken()));
         jsonArea.setCaretPosition(0);
     }
 
@@ -421,7 +433,7 @@ public class McpSettingsDialog extends JDialog {
 
         try {
             ClaudeDesktopConfigurator.ConfigureResult result =
-                    ClaudeDesktopConfigurator.configure(port);
+                    ClaudeDesktopConfigurator.configure(port, httpServer.isRequireToken());
             String msg = result.isCreated()
                     ? MessageFormat.format(bundle.getString("dialog.configure.created.message"), result.getConfigPath())
                     : MessageFormat.format(bundle.getString("dialog.configure.updated.message"), result.getConfigPath(), result.getBackupPath());
@@ -435,14 +447,36 @@ public class McpSettingsDialog extends JDialog {
 
     private void updateTokenField() {
         AuthTokenStore store = httpServer.getTokenStore();
-        tokenField.setText(store != null ? store.current() : "");
-        copyTokenButton.setEnabled(store != null);
-        rotateTokenButton.setEnabled(store != null);
+        boolean enabled = httpServer.isRequireToken();
+        requireTokenCheckBox.setSelected(enabled);
+        tokenLabel.setEnabled(enabled);
+        tokenField.setEnabled(enabled);
+        tokenField.setText(enabled && store != null ? store.current() : "");
+        copyTokenButton.setEnabled(enabled && store != null);
+        rotateTokenButton.setEnabled(enabled && store != null);
+    }
+
+    private void onRequireTokenChanged() {
+        boolean previous = httpServer.isRequireToken();
+        try {
+            httpServer.setRequireToken(requireTokenCheckBox.isSelected());
+            PluginConfig.saveRequireToken(httpServer.isRequireToken());
+        } catch (IOException ex) {
+            try {
+                httpServer.setRequireToken(previous);
+            } catch (IOException rollbackError) {
+                ex.addSuppressed(rollbackError);
+            }
+            LOG.log(Level.WARNING, "Could not change token requirement", ex);
+            showError(MessageFormat.format(bundle.getString("dialog.token.require.error"), ex.getMessage()));
+        }
+        updateTokenField();
+        updateJsonArea();
     }
 
     private void onCopyToken() {
         AuthTokenStore store = httpServer.getTokenStore();
-        if (store == null) return;
+        if (!httpServer.isRequireToken() || store == null) return;
         Toolkit.getDefaultToolkit().getSystemClipboard()
                 .setContents(new StringSelection(store.current()), null);
         JOptionPane.showMessageDialog(this, bundle.getString("dialog.token.copied.message"),
@@ -451,7 +485,7 @@ public class McpSettingsDialog extends JDialog {
 
     private void onRotateToken() {
         AuthTokenStore store = httpServer.getTokenStore();
-        if (store == null) return;
+        if (!httpServer.isRequireToken() || store == null) return;
         int choice = JOptionPane.showConfirmDialog(this,
                 bundle.getString("dialog.token.rotate.confirm"),
                 bundle.getString("dialog.token.rotate.title"),

@@ -6,6 +6,7 @@ import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.Wall;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
@@ -38,6 +39,12 @@ public class CreateWallsHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "x", "y", "width", "height", "thickness", "wallHeight");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         float x = request.getFloat("x");
         float y = request.getFloat("y");
         float width = request.getFloat("width");

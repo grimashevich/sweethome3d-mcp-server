@@ -17,6 +17,7 @@ import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.SchemaBuilder;
+import com.sh3d.mcp.command.util.ValidationUtil;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -57,6 +58,11 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = validateNumbers(request.getParams());
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         String mode = request.getString("mode");
         if (mode == null || mode.trim().isEmpty()) {
             return Response.error("Parameter 'mode' is required ('extrude' or 'mesh')");
@@ -68,6 +74,40 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
         }
 
         return generator.execute(request, accessor);
+    }
+
+    /** Check operands and geometry as well as scalar inputs before generating anything. */
+    @SuppressWarnings("unchecked")
+    private static String validateNumbers(Map<String, Object> params) {
+        String error = ValidationUtil.validateFiniteInputs(params,
+                "width", "depth", "height", "radius", "radiusBottom", "radiusTop", "divisions",
+                "outerRadius", "innerRadius", "x", "y", "angle", "transparency", "elevation",
+                "arcAngle", "steps", "majorRadius", "minorRadius", "majorDivisions", "minorDivisions",
+                "wallThickness", "cutAngle", "offsetX", "offsetY", "offsetZ", "polygon", "vertices", "triangles");
+        if (error != null) {
+            return error;
+        }
+        // A string such as "1e0040" is hexadecimal RGB, not a decimal exponent.
+        Object color = params.get("color");
+        if (color instanceof Number) {
+            error = ValidationUtil.validateFiniteNumbers(params, "color");
+            if (error != null) {
+                return error;
+            }
+        } else if (color instanceof String
+                && ShapeGeneratorSupport.parseColor(new Request("generate_shape", params)) == null) {
+            return "Invalid color format: '" + color + "'. Expected a hex string";
+        }
+        for (String key : Arrays.asList("operandA", "operandB")) {
+            Object operand = params.get(key);
+            if (operand instanceof Map) {
+                error = validateNumbers((Map<String, Object>) operand);
+                if (error != null) {
+                    return key + ": " + error;
+                }
+            }
+        }
+        return null;
     }
 
     // ======================== COMMAND DESCRIPTOR ========================
@@ -82,7 +122,7 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
                 + "Supports parametric primitives: box (width, depth, height), sphere (radius), "
                 + "cylinder (radius, height), cone (radiusBottom, radiusTop, height). "
                 + "Also supports: wedge (width, depth, height, taper), arch (width, height, depth, arcAngle), "
-                + "stairs (width, totalHeight, totalDepth, steps), torus (majorRadius, minorRadius), "
+                + "stairs (width, height, depth, steps), torus (majorRadius, minorRadius), "
                 + "hemisphere (radius, cutAngle — dome/half-sphere with adjustable cut), "
                 + "pipe (outerRadius, innerRadius, height — hollow cylinder with optional arcAngle for partial pipe), "
                 + "csg (Boolean operations: union/subtract/intersect on two primitives — e.g. box minus cylinder = box with hole). "
@@ -131,7 +171,7 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
                                 + "Example for a 400x10cm wall base: [[0,0],[400,0],[400,10],[0,10]]")
                         .items(point2D).minItems(3).build())
 
-                .number("height", "Height in cm. Used by extrude (extrusion height), box, cylinder, cone modes")
+                .number("height", "Height in cm. Used by extrude (extrusion height), box, cylinder, cone, wedge, arch and stairs (total rise) modes")
 
                 // Mesh mode
                 .array("vertices", SchemaBuilder.arrayDef(
@@ -158,8 +198,8 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
                         "Sphere/Cylinder/Cone/Hemisphere/Pipe mode. Number of segments (default 32, min 8, max 64)", 32)
                 .number("outerRadius", "Pipe mode only. Outer radius of the pipe in cm")
                 .number("innerRadius", "Pipe mode only. Inner radius of the pipe in cm (must be less than outerRadius)")
-                .number("width", "Box mode only. Width in cm (X axis)")
-                .number("depth", "Box mode only. Depth in cm (Y axis)")
+                .number("width", "Box/Wedge/Arch/Stairs modes. Width in cm (X axis)")
+                .number("depth", "Box/Wedge/Arch/Stairs modes. Depth in cm (Y axis); total horizontal run for stairs")
                 .number("x", "All modes. Position X in plan coordinates (cm)")
                 .number("y", "All modes. Position Y in plan coordinates (cm)")
                 .number("angle", "All modes. Rotation angle in degrees")
@@ -173,8 +213,6 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
                         "Arch/Pipe mode. Arc angle in degrees (arch default 180 = semicircle, pipe default 360 = full circle)", 180)
 
                 // Stairs
-                .number("totalHeight", "Stairs mode only. Total rise height of the staircase in cm")
-                .number("totalDepth", "Stairs mode only. Total horizontal run of the staircase in cm")
                 .integer("steps", "Stairs mode only. Number of steps")
 
                 // Torus

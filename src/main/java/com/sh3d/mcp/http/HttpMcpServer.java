@@ -57,18 +57,22 @@ public class HttpMcpServer {
 
     private final Path tokenPath;
 
-    /** Bearer token store; null until successfully loaded. The server never starts without it. */
+    /** Bearer token store; loaded only when token authentication is enabled. */
     private volatile AuthTokenStore tokenStore;
+    private volatile boolean requireToken;
 
     public HttpMcpServer(PluginConfig config, CommandRegistry commandRegistry, HomeAccessor accessor) {
         this.port = config.getPort();
         this.currentHandler = new McpRequestHandler(commandRegistry, accessor);
         this.tokenPath = config.getTokenPath();
-        try {
-            this.tokenStore = AuthTokenStore.loadOrCreate(tokenPath);
-        } catch (IOException e) {
-            // Retried on start(); start fails closed if the token is still unavailable
-            LOG.log(Level.WARNING, "Could not load MCP auth token from " + tokenPath, e);
+        this.requireToken = config.isRequireToken();
+        if (requireToken) {
+            try {
+                this.tokenStore = AuthTokenStore.loadOrCreate(tokenPath);
+            } catch (IOException e) {
+                // Retried on start(); start fails closed if the token is still unavailable
+                LOG.log(Level.WARNING, "Could not load MCP auth token from " + tokenPath, e);
+            }
         }
     }
 
@@ -174,6 +178,31 @@ public class HttpMcpServer {
         this.port = port;
     }
 
+    /** Turns the bearer token requirement on or off from the next request — contract S, T5. */
+    public synchronized void setRequireToken(boolean requireToken) throws IOException {
+        if (requireToken && (!this.requireToken || tokenStore == null)) {
+            // Publish the mode only after both token files have been prepared successfully.
+            tokenStore = AuthTokenStore.loadOrCreate(tokenPath);
+        }
+        this.requireToken = requireToken;
+    }
+
+    /** Whether the bearer token is currently required — contract S, T5. */
+    public boolean isRequireToken() {
+        return requireToken;
+    }
+
+    private synchronized void prepareTokenForStart() throws IOException {
+        if (requireToken) {
+            setRequireToken(true);
+        }
+    }
+
+    private String currentToken() {
+        AuthTokenStore store = tokenStore;
+        return store == null ? null : store.current();
+    }
+
     public void addStateListener(ServerStateListener listener) {
         stateListeners.add(listener);
     }
@@ -203,19 +232,14 @@ public class HttpMcpServer {
                 return;
             }
 
-            // Fail closed: never serve /mcp without a bearer token
-            AuthTokenStore store = tokenStore;
-            if (store == null) {
-                store = AuthTokenStore.loadOrCreate(tokenPath);
-                tokenStore = store;
-            }
-            AuthTokenStore activeStore = store;
+            // Fail closed when authentication is enabled; leave token files untouched otherwise.
+            prepareTokenForStart();
 
             localServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
             localServer.setExecutor(localExecutor);
 
             localServer.createContext(MCP_ENDPOINT, new DelegatingMcpHandler())
-                    .getFilters().add(new RequestGuard(port, activeStore::current));
+                    .getFilters().add(new RequestGuard(port, this::currentToken, this::isRequireToken));
             localServer.createContext(HEALTH_ENDPOINT, new HealthHandler())
                     .getFilters().add(new RequestGuard(port, null));
 

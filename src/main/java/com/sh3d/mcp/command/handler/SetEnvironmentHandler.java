@@ -10,6 +10,7 @@ import com.eteks.sweethome3d.model.HomeTexture;
 import com.eteks.sweethome3d.model.TexturesCatalog;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
+import com.sh3d.mcp.command.util.ValidationUtil;
 import com.sh3d.mcp.protocol.Response;
 
 import com.sh3d.mcp.command.util.FormatUtil;
@@ -41,6 +42,12 @@ public class SetEnvironmentHandler implements CommandHandler, CommandDescriptor 
 
     @Override
     public Response execute(Request request, HomeAccessor accessor) {
+        String finiteError = ValidationUtil.validateFiniteInputs(request.getParams(),
+                "wallsAlpha");
+        if (finiteError != null) {
+            return Response.error(finiteError);
+        }
+
         Map<String, Object> params = request.getParams();
 
         boolean hasModifiable = MODIFIABLE_KEYS.stream().anyMatch(params::containsKey);
@@ -228,13 +235,13 @@ public class SetEnvironmentHandler implements CommandHandler, CommandDescriptor 
                 + "Set groundTexture/skyTexture to null to remove the texture and revert to solid color. "
                 + "wallsAlpha controls wall transparency in 3D: 0.0 = fully opaque (default), "
                 + "1.0 = fully transparent (useful for seeing inside rooms). "
-                + "Default ground color is '#D0CC9B' (beige), default sky is '#CCE4FC' (light blue).";
+                + "Default colors are supplied by Sweet Home 3D.";
     }
 
     @Override
     public Map<String, Object> getSchema() {
         return SchemaBuilder.create()
-                .string("groundColor", "Ground color as '#RRGGBB' (default '#D0CC9B' beige)")
+                .string("groundColor", "Ground color as '#RRGGBB'")
                 .nullableString("groundTexture",
                         "Ground texture name from list_textures_catalog, or null to remove texture")
                 .string("groundTextureCategory", "Category to disambiguate ground texture name")
