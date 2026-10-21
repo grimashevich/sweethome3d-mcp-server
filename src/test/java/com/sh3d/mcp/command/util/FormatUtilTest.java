@@ -4,6 +4,7 @@ import com.eteks.sweethome3d.model.DimensionLine;
 import com.eteks.sweethome3d.model.HomeEnvironment;
 import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.Level;
+import com.eteks.sweethome3d.model.TextStyle;
 import com.eteks.sweethome3d.model.Wall;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -454,6 +455,44 @@ class FormatUtilTest {
             assertEquals(200.0, ((Number) info.get("y")).doubleValue(), 0.01);
             assertEquals(90.0, ((Number) info.get("angle")).doubleValue(), 0.01);
             assertEquals("#FF0000", info.get("color"));
+        }
+
+        @Test
+        void labelDetailsWithoutStyleHaveExactKeysInOrder() {
+            assertEquals(
+                    Arrays.asList("id", "text", "x", "y", "angle", "color", "outlineColor", "elevation", "pitch"),
+                    keysOf(FormatUtil.buildLabelDetails(new Label("Kitchen", 100, 200))));
+        }
+
+        @Test
+        void labelDetailsValues() {
+            Label label = new Label("Exit", 100, 200);
+            label.setOutlineColor(0x00FF00);
+            label.setElevation(180);
+            label.setPitch((float) Math.toRadians(90));
+            label.setStyle(new TextStyle("Arial", 24f, true, false, TextStyle.Alignment.RIGHT));
+            Map<String, Object> info = FormatUtil.buildLabelDetails(label);
+
+            assertEquals("Exit", info.get("text"));
+            assertEquals("#00FF00", info.get("outlineColor"));
+            assertEquals(180.0, ((Number) info.get("elevation")).doubleValue(), 0.01);
+            assertEquals(90.0, ((Number) info.get("pitch")).doubleValue(), 0.01);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> style = (Map<String, Object>) info.get("style");
+            assertEquals(Arrays.asList("fontSize", "bold", "italic", "alignment"), keysOf(style));
+            assertEquals(24.0, ((Number) style.get("fontSize")).doubleValue(), 0.0);
+            assertEquals(true, style.get("bold"));
+            assertEquals(false, style.get("italic"));
+            assertEquals("RIGHT", style.get("alignment"));
+        }
+
+        @Test
+        void labelDetailsReportFlatLabelPitchAsNull() {
+            Map<String, Object> info = FormatUtil.buildLabelDetails(new Label("Kitchen", 100, 200));
+
+            assertTrue(info.containsKey("pitch"));
+            assertNull(info.get("pitch"));
+            assertFalse(info.containsKey("style"), "no style key for a label without its own style");
         }
 
         @Test

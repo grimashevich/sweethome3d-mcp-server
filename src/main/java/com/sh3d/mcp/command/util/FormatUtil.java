@@ -8,6 +8,7 @@ import com.eteks.sweethome3d.model.HomeTexture;
 import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.Level;
 import com.eteks.sweethome3d.model.Room;
+import com.eteks.sweethome3d.model.TextStyle;
 import com.eteks.sweethome3d.model.Wall;
 
 import java.util.ArrayList;
@@ -214,6 +215,30 @@ public final class FormatUtil {
         info.put("y", round2(label.getY()));
         info.put("angle", round2(Math.toDegrees(label.getAngle())));
         info.put("color", colorToHex(label.getColor()));
+        return info;
+    }
+
+    /**
+     * Builds the full label map reported by the label-editing commands: the fields of
+     * {@link #buildLabelInfo} followed by outlineColor, elevation, pitch (degrees, null when flat
+     * on the plan) and, only when the label has its own text style, a style map
+     * (fontSize, bold, italic, alignment). Callers may append extra fields (level).
+     */
+    public static Map<String, Object> buildLabelDetails(Label label) {
+        Map<String, Object> info = buildLabelInfo(label);
+        info.put("outlineColor", colorToHex(label.getOutlineColor()));
+        info.put("elevation", round2(label.getElevation()));
+        Float pitch = label.getPitch();
+        info.put("pitch", pitch != null ? round2((float) Math.toDegrees(pitch)) : null);
+        TextStyle style = label.getStyle();
+        if (style != null) {
+            Map<String, Object> styleMap = new LinkedHashMap<>();
+            styleMap.put("fontSize", style.getFontSize());
+            styleMap.put("bold", style.isBold());
+            styleMap.put("italic", style.isItalic());
+            styleMap.put("alignment", style.getAlignment().name());
+            info.put("style", styleMap);
+        }
         return info;
     }
 

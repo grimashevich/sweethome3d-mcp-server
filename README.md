@@ -119,7 +119,7 @@ Then quit Claude Desktop completely and start it again.
 
 ## Available Commands
 
-44 commands across 14 categories.
+46 commands across 14 categories.
 
 ### Scene
 
@@ -184,6 +184,8 @@ Then quit Claude Desktop completely and start it again.
 | Command | Description |
 |---------|-------------|
 | `add_label` | Text annotation on the 2D floor plan |
+| `modify_label` | Change a label's text, position, angle, colors, font style or 3D placement by ID |
+| `delete_label` | Delete label by ID |
 | `add_dimension_line` | Measurement line with auto-offset |
 | `modify_dimension_line` | Move a dimension line's endpoints or offset by ID |
 | `delete_dimension_line` | Delete dimension line by ID |
@@ -275,7 +277,7 @@ The plugin is a single self-contained component with no external runtime depende
 
 - **`plugin`** — Entry point (`SH3DMcpPlugin`), settings dialog
 - **`http`** — Streamable HTTP MCP server (JSON-RPC 2.0, port 9877)
-- **`command`** — 44 command handlers, auto-registered via `CommandRegistry`
+- **`command`** — 46 command handlers, auto-registered via `CommandRegistry`
 - **`bridge`** — Thread-safe Sweet Home 3D API wrapper (`HomeAccessor` via EDT, `CheckpointManager`, `ObjectResolver`)
 - **`protocol`** — Hand-written JSON parser (zero external dependencies)
 - **`config`** — Plugin settings, Claude Desktop auto-configurator

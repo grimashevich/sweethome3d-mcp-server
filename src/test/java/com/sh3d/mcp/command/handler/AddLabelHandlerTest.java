@@ -3,6 +3,7 @@ package com.sh3d.mcp.command.handler;
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.Label;
 import com.eteks.sweethome3d.model.TextStyle;
+import com.eteks.sweethome3d.model.UserPreferences;
 import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,6 +20,8 @@ import java.util.Map;
 
 import static com.sh3d.mcp.command.handler.TestFixtures.createAccessor;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AddLabelHandlerTest {
 
@@ -199,6 +203,98 @@ class AddLabelHandlerTest {
         Label label = new ArrayList<>(home.getLabels()).get(0);
         assertNull(label.getPitch());
         assertNull(resp.getData().get("pitch"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(doubles = {90.0, 0.0})
+    void testNumericPitchWithoutFontSizeUsesPreferencesDefault(double pitch) {
+        TextStyle defaultStyle = new TextStyle("Serif", 27f, true, true, TextStyle.Alignment.LEFT);
+        UserPreferences prefs = mock(UserPreferences.class);
+        when(prefs.getDefaultTextStyle(Label.class)).thenReturn(defaultStyle);
+        accessor = new HomeAccessor(home, prefs);
+        Map<String, Object> p = params("Exit", 100.0, 200.0);
+        p.put("pitch", pitch);
+
+        Response resp = exec(p);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        Label label = home.getLabels().iterator().next();
+        assertNotNull(label.getStyle());
+        assertEquals(defaultStyle.getFontSize(), label.getStyle().getFontSize(), 0f);
+        assertEquals(defaultStyle, label.getStyle());
+        assertEquals(Math.toRadians(pitch), label.getPitch(), 1e-5);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> style = (Map<String, Object>) resp.getData().get("style");
+        assertNotNull(style);
+        assertEquals(27f, ((Number) style.get("fontSize")).floatValue(), 0f);
+        assertEquals(true, style.get("bold"));
+        assertEquals(true, style.get("italic"));
+        assertEquals("LEFT", style.get("alignment"));
+    }
+
+    @Test
+    void testNumericPitchWithoutPreferencesUsesFallbackStyle() {
+        Map<String, Object> p = params("Exit", 100.0, 200.0);
+        p.put("pitch", 90);
+
+        Response resp = exec(p);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertEquals(new TextStyle(18f), home.getLabels().iterator().next().getStyle());
+    }
+
+    @Test
+    void testNumericPitchWithoutPreferencesDefaultUsesFallbackStyle() {
+        accessor = new HomeAccessor(home, mock(UserPreferences.class));
+        Map<String, Object> p = params("Exit", 100.0, 200.0);
+        p.put("pitch", 90);
+
+        Response resp = exec(p);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertEquals(new TextStyle(18f), home.getLabels().iterator().next().getStyle());
+    }
+
+    @Test
+    void testNullPitchWithoutFontSizeDoesNotCreateStyle() {
+        Map<String, Object> p = params("Exit", 100.0, 200.0);
+        p.put("pitch", null);
+
+        Response resp = exec(p);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        Label label = home.getLabels().iterator().next();
+        assertNull(label.getPitch());
+        assertNull(label.getStyle());
+        assertFalse(resp.getData().containsKey("style"));
+    }
+
+    @Test
+    void testNoPitchOrFontSizeDoesNotCreateStyle() {
+        Response resp = exec(params("Exit", 100.0, 200.0));
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertNull(home.getLabels().iterator().next().getStyle());
+        assertFalse(resp.getData().containsKey("style"));
+    }
+
+    @Test
+    void testNumericPitchKeepsExplicitStyle() {
+        UserPreferences prefs = mock(UserPreferences.class);
+        when(prefs.getDefaultTextStyle(Label.class)).thenReturn(new TextStyle(18f));
+        accessor = new HomeAccessor(home, prefs);
+        Map<String, Object> p = params("Exit", 100.0, 200.0);
+        p.put("pitch", 90);
+        p.put("fontSize", 24);
+        p.put("bold", true);
+        p.put("italic", true);
+        p.put("alignment", "RIGHT");
+
+        Response resp = exec(p);
+
+        assertTrue(resp.isOk(), resp.getMessage());
+        assertEquals(new TextStyle(null, 24f, true, true, TextStyle.Alignment.RIGHT),
+                home.getLabels().iterator().next().getStyle());
     }
 
     @Test

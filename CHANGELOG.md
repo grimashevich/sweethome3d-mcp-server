@@ -13,13 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `delete_dimension_line` — remove a dimension line from the 2D plan by ID.
 
   Dimension lines could previously only be added.
+- `modify_label` — change an existing label by ID: `text`, `x`, `y`, `angle`, `color`, `outlineColor`, `fontSize`, `bold`, `italic`, `alignment`, `elevation`, `pitch`. Only the given properties change; the label stays on its level. Font properties can be changed one at a time: a label without its own text style starts from Sweet Home 3D's default label style, so its drawn size is kept. Every value is checked before anything changes (finite numbers, a positive `fontSize`, non-empty `text`, `#RRGGBB` colors, `LEFT`/`CENTER`/`RIGHT` alignment).
+- `delete_label` — remove a label from the 2D plan by ID.
+
+  Both report the label like `add_label` does, plus its `level`. Labels could previously only be added, so changing one meant clearing the scene, deleting its level or rolling back to a checkpoint.
 
 ### Changed
 - `add_dimension_line` responses gain a `level` field, the same one `get_state` reports for the line.
 - `add_label` reports `angle` rounded the same way as `get_state` (the stored angle to two decimals). The two used to disagree by 0.01° for some angles given with a third decimal of 5, e.g. `5.275` was echoed as `5.28` by `add_label` and reported as `5.27` by `get_state`; both now say `5.27`. Angles with up to two decimals are unaffected.
-- Internal: the response maps for levels, labels, the 3D environment and dimension lines are built in one place (`FormatUtil`) and shared by `get_state`, `list_levels`, `add_level`, `set_selected_level`, `add_label`, `set_environment` and `add_dimension_line`. Apart from the two changes above, responses keep their exact fields, key order and values.
+- Internal: the response maps for levels, labels, the 3D environment and dimension lines are built in one place (`FormatUtil`) and shared by `get_state`, `list_levels`, `add_level`, `set_selected_level`, `add_label`, `set_environment` and `add_dimension_line`. Apart from the two changes above, responses keep their exact fields, key order and values. The full label response of `add_label` is built there too and shared with `modify_label` and `delete_label`; `add_label`'s response is unchanged.
 
 ### Fixed
+- `add_label` and `modify_label` with a numeric `pitch` now assign Sweet Home 3D's default label style to labels without a style; otherwise Sweet Home 3D doesn't display them in 3D. The response reports that style in `style`.
 - `place_door_or_window` and `place_furniture` now create a `HomeDoorOrWindow` when the catalog item is a door or window, instead of a generic `HomePieceOfFurniture` flagged as one. The generic piece lost the catalog's sash definitions (no swing arc in the plan, hinge side not switchable with `mirrored`), the wall cut-out shape and the frame-to-wall metadata, so doors rendered as a narrow leaf floating in an oversized opening. Doors placed with `place_door_or_window` in a straight wall are also bound to it, as the app does on drop.
 - `place_door_or_window` fits the door or window frame into the wall the way Sweet Home 3D does on drop: a stretchable model gets the depth at which its frame is exactly as thick as the wall, and the piece is offset so the frame sits within the wall. The reported `depth` and `x`/`y` change accordingly (e.g. 38.7 cm instead of 20 cm for the default `Door` in a 20 cm wall). The plan footprint now uses the same depth as the 3D model, and a catalog item that cannot be resized no longer fails with "Piece isn't resizable" (asking to mirror such an item now returns a clear error instead of placing nothing).
 - `place_door_or_window` on a round (arc) wall places the piece on the arc itself, with `position` measured along the arc and the piece turned along the tangent; it used to sit on the chord, away from the wall.

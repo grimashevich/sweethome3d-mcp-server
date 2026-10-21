@@ -122,6 +122,24 @@ class ResponseShapeTest {
         assertEquals(Arrays.asList("fontSize", "bold", "italic", "alignment"), keys(data.get("style")));
     }
 
+    /** modify_label and delete_label report the label the way add_label does, plus its level. */
+    @Test
+    void modifyAndDeleteLabelResponses() {
+        Label label = addLabel(home, "Kitchen", 300, 200);
+
+        Map<String, Object> modified = run(new ModifyLabelHandler(), "modify_label",
+                "id", label.getId(), "fontSize", 24.0);
+        List<String> expected = new ArrayList<>(LABEL_KEYS);
+        expected.add("style");
+        expected.add("level");
+        assertEquals(expected, keys(modified));
+        assertEquals(Arrays.asList("fontSize", "bold", "italic", "alignment"), keys(modified.get("style")));
+
+        Map<String, Object> deleted = run(new DeleteLabelHandler(), "delete_label", "id", label.getId());
+        expected.add("message");
+        assertEquals(expected, keys(deleted));
+    }
+
     @Test
     void setEnvironmentResponse() {
         Map<String, Object> data = run(new SetEnvironmentHandler(), "set_environment",
