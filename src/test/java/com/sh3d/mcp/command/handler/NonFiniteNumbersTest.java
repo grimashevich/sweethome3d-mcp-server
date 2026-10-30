@@ -203,6 +203,12 @@ class NonFiniteNumbersTest {
                     "vertices", list(list(0.0, 0.0, 0.0), list(100.0, 0.0, 0.0), list(0.0, 100.0, 0.0)),
                     "triangles", list(list(0, 1, 2)), "wallThickness", 2.0),
                     "wallThickness"),
+            new Case("generate_shape", req("mode", "mesh",
+                    "vertices", list(list(0.0, 0.0, 0.0), list(100.0, 0.0, 0.0), list(0.0, 100.0, 0.0)),
+                    "triangles", list(list(0, 1, 2)), "texture", testTexture(),
+                    "uvs", list(list(0.0, 0.0), list(100.0, 0.0), list(0.0, 100.0)),
+                    "textureWidth", 45.0, "textureHeight", 60.0),
+                    "uvs[1][0]", "uvs[2][1]", "textureWidth", "textureHeight"),
             new Case("generate_shape", req("mode", "csg", "operation", "subtract",
                     "operandA", map(req("mode", "box", "width", 100.0, "depth", 100.0, "height", 50.0)),
                     "operandB", map(req("mode", "cylinder", "radius", 20.0, "height", 60.0, "offsetX", 0.0))),
@@ -210,6 +216,19 @@ class NonFiniteNumbersTest {
     );
 
     private static final Object[] NON_FINITE = {1e40, "NaN"};
+
+    /** A small PNG on disk for the textured mesh case. */
+    private static String testTexture() {
+        try {
+            java.io.File file = java.io.File.createTempFile("nonfinite-texture", ".png");
+            file.deleteOnExit();
+            javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(4, 4,
+                    java.awt.image.BufferedImage.TYPE_INT_RGB), "png", file);
+            return file.getAbsolutePath();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
 
     /** Параметры, которые схема называет, а команда не читает вовсе (находка вне B2). */
     private static final List<String> NOT_READ = Arrays.asList(

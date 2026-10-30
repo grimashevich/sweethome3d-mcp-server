@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `generate_shape` mesh mode can carry a texture: `texture` (a textures catalog name or an absolute image path) with `uvs`, one `[u, v]` per vertex in cm on the texture. The image repeats every `textureWidth` x `textureHeight` cm (the catalog size by default, 100 cm for image files) and is stored in the generated model, so it shows in 3D views, photos and OBJ exports. `texture` cannot be combined with `color` or `wallThickness`; invalid or non-finite `uvs` and texture sizes are rejected before changes.
+
 ## [1.2.0] - 2026-10-21
 
 ### Security
