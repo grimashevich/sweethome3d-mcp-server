@@ -1,12 +1,20 @@
 package com.sh3d.mcp.command.shape;
 
+import com.eteks.sweethome3d.model.CatalogTexture;
+import com.eteks.sweethome3d.model.TexturesCatalog;
 import com.sh3d.mcp.bridge.HomeAccessor;
+import com.sh3d.mcp.command.util.CatalogSearchUtil;
 import com.sh3d.mcp.protocol.Request;
 import com.sh3d.mcp.protocol.Response;
 
+import javax.imageio.ImageIO;
 import javax.media.j3d.BranchGroup;
 import javax.vecmath.Point3f;
+import javax.vecmath.TexCoord2f;
 
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +29,11 @@ import java.util.Set;
  * <p>When {@code wallThickness} is specified, the thin shell mesh is solidified:
  * an inner surface is created by offsetting each vertex inward along its averaged normal,
  * the inner surface winding is reversed, and boundary edges are connected with side faces.</p>
+ *
+ * <p>When {@code texture} and {@code uvs} are specified, the mesh carries its own texture:
+ * {@code uvs} gives each vertex a [u, v] position in cm on the texture, and the image repeats
+ * every {@code textureWidth} x {@code textureHeight} cm. The texture is either a name from the
+ * textures catalog (whose size is used by default) or a path to an image file.</p>
  */
 public final class MeshShapeGenerator implements ShapeGenerator {
 
@@ -90,6 +103,37 @@ public final class MeshShapeGenerator implements ShapeGenerator {
 
         Integer colorValue = ShapeGeneratorSupport.parseColor(request);
 
+        // Optional: texture + uvs
+        Map<String, Object> params = request.getParams();
+        boolean hasTexture = params.get("texture") != null;
+        boolean hasUvs = params.get("uvs") != null;
+        float[][] uvs = null;
+        TextureImage textureImage = null;
+        if (hasTexture || hasUvs) {
+            if (!hasTexture || !hasUvs) {
+                return Response.error("Parameters 'texture' and 'uvs' must be given together");
+            }
+            if (wallThickness > 0) {
+                return Response.error("Parameter 'texture' cannot be combined with 'wallThickness'");
+            }
+            if (colorValue != null) {
+                return Response.error("Use either 'color' or 'texture', not both");
+            }
+            if (!(params.get("uvs") instanceof List)
+                    || (uvs = parsePoints2D((List<?>) params.get("uvs"))) == null) {
+                return Response.error("Invalid uvs format: each must be [u, v] with finite numeric values (cm)");
+            }
+            if (uvs.length != vertices.length) {
+                return Response.error("Parameter 'uvs' must have one [u, v] per vertex ("
+                        + vertices.length + " expected, got " + uvs.length + ")");
+            }
+            try {
+                textureImage = resolveTexture(request, accessor);
+            } catch (IllegalArgumentException e) {
+                return Response.error(e.getMessage());
+            }
+        }
+
         // Build geometry in J3D coordinates
         // Input: x = SH3D X (right), y = SH3D Y (down in plan), z = height (up)
         // J3D:   X = SH3D X,         Y = height (up),            Z = SH3D Y
@@ -107,7 +151,19 @@ public final class MeshShapeGenerator implements ShapeGenerator {
         }
 
         Point3f[] coordArray = coords.toArray(new Point3f[0]);
-        ShapeGeneratorSupport.addShapeToRoot(root, coordArray, transparency);
+        if (textureImage != null) {
+            List<TexCoord2f> texCoords = new ArrayList<>();
+            for (int[] tri : triangles) {
+                for (int idx : tri) {
+                    texCoords.add(new TexCoord2f(uvs[idx][0] / textureImage.width,
+                            uvs[idx][1] / textureImage.height));
+                }
+            }
+            ShapeGeneratorSupport.addTexturedShapeToRoot(root, coordArray,
+                    texCoords.toArray(new TexCoord2f[0]), textureImage.image, transparency);
+        } else {
+            ShapeGeneratorSupport.addShapeToRoot(root, coordArray, transparency);
+        }
 
         // Compute bounding box from all generated coords (J3D: x, y=up, z)
         float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
@@ -288,7 +344,95 @@ public final class MeshShapeGenerator implements ShapeGenerator {
         v[2] /= len;
     }
 
+    // ======================== TEXTURE ========================
+
+    /** Texture image with the size in cm that one repeat covers. */
+    private static final class TextureImage {
+        final BufferedImage image;
+        final float width;
+        final float height;
+
+        TextureImage(BufferedImage image, float width, float height) {
+            this.image = image;
+            this.width = width;
+            this.height = height;
+        }
+    }
+
+    /**
+     * Resolves 'texture' as a textures catalog name first, then as an image file path.
+     * 'textureWidth' / 'textureHeight' override the catalog size (default 100 cm for files).
+     *
+     * @throws IllegalArgumentException with a message for the client
+     */
+    private static TextureImage resolveTexture(Request request, HomeAccessor accessor) {
+        String texture = request.getString("texture");
+        Map<String, Object> params = request.getParams();
+        float width = 100f;
+        float height = 100f;
+        BufferedImage image = null;
+
+        TexturesCatalog catalog = accessor.getTexturesCatalog();
+        CatalogTexture found = null;
+        if (catalog != null) {
+            CatalogSearchUtil.TextureSearchResult result = CatalogSearchUtil.findTexture(catalog, texture, null);
+            if (result.isFound()) {
+                found = result.getFound();
+            }
+        }
+        try {
+            if (found != null) {
+                width = found.getWidth();
+                height = found.getHeight();
+                try (InputStream in = found.getImage().openStream()) {
+                    image = ImageIO.read(in);
+                }
+            } else {
+                File file = new File(texture);
+                if (!file.isAbsolute() || !file.isFile()) {
+                    throw new IllegalArgumentException("Texture not found: '" + texture
+                            + "'. Use a name from list_textures_catalog or an absolute path to an image file");
+                }
+                image = ImageIO.read(file);
+            }
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("Could not read texture '" + texture + "': " + e.getMessage());
+        }
+        if (image == null) {
+            throw new IllegalArgumentException("Texture '" + texture + "' is not a readable image (PNG, JPEG, GIF or BMP)");
+        }
+
+        if (params.containsKey("textureWidth")) {
+            width = ShapeGeneratorSupport.toFloat(params.get("textureWidth"));
+        }
+        if (params.containsKey("textureHeight")) {
+            height = ShapeGeneratorSupport.toFloat(params.get("textureHeight"));
+        }
+        if (!(width > 0) || !(height > 0) || Float.isInfinite(width) || Float.isInfinite(height)) {
+            throw new IllegalArgumentException("Parameters 'textureWidth' and 'textureHeight' must be positive (cm)");
+        }
+        return new TextureImage(image, width, height);
+    }
+
     // ======================== PARSING ========================
+
+    private float[][] parsePoints2D(List<?> list) {
+        float[][] points = new float[list.size()][2];
+        for (int i = 0; i < list.size(); i++) {
+            Object item = list.get(i);
+            if (!(item instanceof List)) return null;
+            List<?> point = (List<?>) item;
+            if (point.size() != 2) return null;
+            try {
+                points[i][0] = ShapeGeneratorSupport.toFloat(point.get(0));
+                points[i][1] = ShapeGeneratorSupport.toFloat(point.get(1));
+            } catch (Exception e) {
+                return null;
+            }
+            if (!Float.isFinite(points[i][0]) || !Float.isFinite(points[i][1])) return null;
+        }
+        return points;
+    }
 
     private float[][] parsePoints3D(List<?> list) {
         float[][] points = new float[list.size()][3];

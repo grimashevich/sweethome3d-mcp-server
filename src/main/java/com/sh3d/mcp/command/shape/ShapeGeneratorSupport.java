@@ -15,13 +15,18 @@ import javax.media.j3d.Appearance;
 import javax.media.j3d.BranchGroup;
 import javax.media.j3d.Material;
 import javax.media.j3d.Shape3D;
+import javax.media.j3d.Texture;
+import javax.media.j3d.TextureAttributes;
 import javax.media.j3d.TransparencyAttributes;
 import javax.vecmath.Color3f;
 import javax.vecmath.Point3f;
+import javax.vecmath.TexCoord2f;
 
 import com.sun.j3d.utils.geometry.GeometryInfo;
 import com.sun.j3d.utils.geometry.NormalGenerator;
+import com.sun.j3d.utils.image.TextureLoader;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.net.URL;
 import java.util.Map;
@@ -67,6 +72,31 @@ public final class ShapeGeneratorSupport {
         new NormalGenerator((float)(Math.PI / 3)).generateNormals(geometryInfo);
 
         root.addChild(new Shape3D(geometryInfo.getIndexedGeometryArray(), createAppearance(transparency)));
+    }
+
+    /**
+     * Adds a textured Shape3D with auto-generated normals to the BranchGroup.
+     * {@code texCoords} runs parallel to {@code coords}, in texture repeats; the image
+     * repeats beyond [0, 1] and is written into the exported model with the geometry.
+     */
+    public static void addTexturedShapeToRoot(BranchGroup root, Point3f[] coords, TexCoord2f[] texCoords,
+                                              BufferedImage image, float transparency) {
+        GeometryInfo geometryInfo = new GeometryInfo(GeometryInfo.TRIANGLE_ARRAY);
+        geometryInfo.setCoordinates(coords);
+        geometryInfo.setTextureCoordinateParams(1, 2);
+        geometryInfo.setTextureCoordinates(0, texCoords);
+        new NormalGenerator((float)(Math.PI / 3)).generateNormals(geometryInfo);
+
+        Texture texture = new TextureLoader(image).getTexture();
+        texture.setBoundaryModeS(Texture.WRAP);
+        texture.setBoundaryModeT(Texture.WRAP);
+        TextureAttributes textureAttributes = new TextureAttributes();
+        textureAttributes.setTextureMode(TextureAttributes.MODULATE);
+        Appearance appearance = createAppearance(transparency);
+        appearance.setTexture(texture);
+        appearance.setTextureAttributes(textureAttributes);
+
+        root.addChild(new Shape3D(geometryInfo.getIndexedGeometryArray(), appearance));
     }
 
     /**

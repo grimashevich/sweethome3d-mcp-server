@@ -83,7 +83,8 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
                 "width", "depth", "height", "radius", "radiusBottom", "radiusTop", "divisions",
                 "outerRadius", "innerRadius", "x", "y", "angle", "transparency", "elevation",
                 "arcAngle", "steps", "majorRadius", "minorRadius", "majorDivisions", "minorDivisions",
-                "wallThickness", "cutAngle", "offsetX", "offsetY", "offsetZ", "polygon", "vertices", "triangles");
+                "wallThickness", "cutAngle", "offsetX", "offsetY", "offsetZ", "polygon", "vertices", "triangles",
+                "uvs", "textureWidth", "textureHeight");
         if (error != null) {
             return error;
         }
@@ -134,6 +135,9 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
                 + "All coordinates are in centimeters. "
                 + "In extrude mode, polygon points use SH3D plan coordinates (X right, Y down). "
                 + "In mesh mode, vertices are [x, y, z] where x/y are plan coordinates and z is height above floor. "
+                + "Mesh mode can carry a texture: pass 'texture' (textures catalog name or absolute image path) "
+                + "and 'uvs' ([u, v] per vertex, in cm on the texture) instead of 'color'; "
+                + "the image repeats every textureWidth x textureHeight cm (catalog size by default). "
                 + "All modes support optional: name, color (#RRGGBB or integer), transparency (0-1), elevation, x, y, angle.";
     }
 
@@ -227,6 +231,19 @@ public class GenerateShapeHandler implements CommandHandler, CommandDescriptor {
                 .number("wallThickness", "Mesh mode only. Wall thickness in cm. "
                         + "When set, the thin shell mesh is solidified: outer surface + inner surface (offset inward) "
                         + "+ side faces on boundary edges. Must be positive.")
+
+                // Mesh texture
+                .string("texture", "Mesh mode only. Texture for the mesh: a name from list_textures_catalog, "
+                        + "or an absolute path to a PNG/JPEG image. Requires 'uvs'; replaces 'color'")
+                .array("uvs", SchemaBuilder.arrayDef(
+                        "Mesh mode only. Texture coordinates, one [u, v] per vertex, in cm on the texture "
+                                + "(e.g. distance along and across a roof slope). The image repeats every "
+                                + "textureWidth x textureHeight cm")
+                        .items(point2D).build())
+                .number("textureWidth", "Mesh mode only. Width in cm covered by one repeat of the texture "
+                        + "(default: catalog texture width, or 100 for image files)")
+                .number("textureHeight", "Mesh mode only. Height in cm covered by one repeat of the texture "
+                        + "(default: catalog texture height, or 100 for image files)")
 
                 // Hemisphere
                 .numberWithDefault("cutAngle",
