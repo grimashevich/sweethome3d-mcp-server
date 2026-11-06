@@ -111,6 +111,8 @@ Claude Desktop using `mcp-remote --header-file`, as shown below.
 `localhost:<port>`, or that carries an `Origin` other than `http://127.0.0.1:<port>` /
 `http://localhost:<port>` (DNS-rebinding and cross-site protection). No CORS headers are sent.
 Host and Origin comparisons ignore case; repeated or comma-separated values are rejected.
+On Java 11.0.33, 17.0.21 and later, a missing or repeated `Host` is already refused by Java's
+built-in HTTP server, with `400`, before the plugin's check runs.
 On port 80, the same addresses without `:80` are also accepted.
 Request bodies are limited to 5 MB (`413`).
 
