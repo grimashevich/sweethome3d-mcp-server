@@ -42,6 +42,8 @@ import com.sh3d.mcp.command.handler.ListLevelsHandler;
 import com.sh3d.mcp.command.handler.ListTexturesCatalogHandler;
 import com.sh3d.mcp.command.handler.PlaceDoorOrWindowHandler;
 import com.sh3d.mcp.command.handler.PlaceFurnitureHandler;
+import com.sh3d.mcp.command.handler.ExportVideoHandler;
+import com.sh3d.mcp.command.handler.ExportVideoStatusHandler;
 import com.sh3d.mcp.command.handler.RenderPhotoHandler;
 import com.sh3d.mcp.command.handler.RestoreCheckpointHandler;
 import com.sh3d.mcp.command.handler.LoadHomeHandler;
@@ -76,6 +78,12 @@ public class SH3DMcpPlugin extends Plugin {
 
     /** Lock for all static singleton state. */
     private static final Object LOCK = new Object();
+
+    /**
+     * Shared by every Home's registry: a video job outlives switching the server to another Home, and only
+     * one export renders at a time in this JVM.
+     */
+    private static final ExportVideoHandler EXPORT_VIDEO = new ExportVideoHandler();
 
     /** Shared MCP server — created by the first Plugin instance, stopped by the last. */
     private static HttpMcpServer sharedServer;
@@ -241,6 +249,8 @@ public class SH3DMcpPlugin extends Plugin {
         registry.register("export_plan_image", new ExportPlanImageHandler(planView));
         registry.register("export_svg", new ExportSvgHandler(planView));
         registry.register("export_to_obj", new ExportToObjHandler());
+        registry.register("export_video", EXPORT_VIDEO);
+        registry.register("export_video_status", new ExportVideoStatusHandler(EXPORT_VIDEO));
         registry.register("set_camera", new SetCameraHandler());
         registry.register("set_environment", new SetEnvironmentHandler());
         registry.register("set_selected_level", new SetSelectedLevelHandler());
