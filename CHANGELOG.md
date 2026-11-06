@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- On Java 11.0.33, 17.0.21 and later, a request with a missing, repeated or comma-joined `Host` header is refused with `400` by Java's built-in HTTP server before the plugin's `Host` check, which answers `403`. Such requests are still refused before any command runs; the Host/Origin tests accept either status for these cases.
+
 ## [1.2.0] - 2026-10-21
 
 ### Security

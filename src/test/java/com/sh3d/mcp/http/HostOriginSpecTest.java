@@ -138,7 +138,7 @@ class HostOriginSpecTest {
         }
     }
 
-    // H1: missing Host — 403 (HTTP/1.1 without Host and HTTP/1.0, which does not require it).
+    // H1: missing Host — refused (HTTP/1.1 without Host and HTTP/1.0, which does not require it).
     @ParameterizedTest(name = "requireToken={0}")
     @ValueSource(booleans = {false, true})
     void h1RefusesMissingHost(boolean requireToken) throws Exception {
@@ -154,8 +154,7 @@ class HostOriginSpecTest {
                     }
                     credentials(f, requireToken).forEach(r::header);
                     RawResponse response = send(f.port, r);
-                    assertEquals(403, response.status,
-                            endpoint + (http10 ? " HTTP/1.0" : " HTTP/1.1") + " without Host: " + response);
+                    assertHostRefused(response, endpoint + (http10 ? " HTTP/1.0" : " HTTP/1.1") + " without Host");
                 }
             }
         }
@@ -208,6 +207,32 @@ class HostOriginSpecTest {
         }
     }
 
+    /**
+     * A missing, repeated or comma-joined Host header is refused. JDK 11.0.33, 17.0.21 and later refuse it in
+     * {@code com.sun.net.httpserver} itself, with 400, before {@code RequestGuard} runs; older JDKs leave it to
+     * {@code RequestGuard}, which answers 403. Either way no handler sees the request.
+     */
+    static void assertHostRefused(RawResponse response, String message) {
+        if (response.status == 400) {
+            assertTrue(response.body.contains("Host"), message + ": a 400 must be the JDK refusing Host: " + response);
+        } else {
+            assertEquals(403, response.status, message + ": " + response);
+        }
+    }
+
+    /** Whether the JDK's HTTP server itself checks the Host of these header lines: not exactly one, or joined. */
+    static boolean jdkChecksHost(String[] headerLines) {
+        int hosts = 0;
+        boolean joined = false;
+        for (String line : headerLines) {
+            if (line.regionMatches(true, 0, "Host:", 0, 5)) {
+                hosts++;
+                joined |= line.indexOf(',') >= 0;
+            }
+        }
+        return hosts != 1 || joined;
+    }
+
     // ==================== H1a: repeated or joined values ====================
 
     static Stream<Arguments> repeatedHeaders() {
@@ -237,7 +262,7 @@ class HostOriginSpecTest {
         return args.stream();
     }
 
-    // H1a: more than one Host or Origin, or a value with a comma — 403; every value is checked.
+    // H1a: more than one Host or Origin, or a value with a comma — refused (403; for Host, possibly the JDK's 400).
     @ParameterizedTest(name = "requireToken={0}, {1}, {2}")
     @MethodSource("repeatedHeaders")
     void h1aRefusesRepeatedOrJoinedHostAndOrigin(boolean requireToken, String endpoint, String joined)
@@ -247,12 +272,17 @@ class HostOriginSpecTest {
             if (endpoint.equals("/mcp")) {
                 r.json(PING);
             }
-            for (String h : joined.split(" \\| ")) {
+            String[] lines = joined.split(" \\| ");
+            for (String h : lines) {
                 r.header(String.format(h, f.port));
             }
             credentials(f, requireToken).forEach(r::header);
             RawResponse response = send(f.port, r);
-            assertEquals(403, response.status, joined + ": " + response);
+            if (jdkChecksHost(lines)) {
+                assertHostRefused(response, joined);
+            } else {
+                assertEquals(403, response.status, joined + ": " + response);
+            }
             assertEquals(0, f.tool.executions.get());
         }
     }
@@ -436,10 +466,15 @@ class HostOriginSpecTest {
                 post(null, INITIALIZE),
                 post(f.hostHeader(), INITIALIZE).header("Origin: http://localhost:" + otherPort(f.port)),
             };
-            for (RawRequest r : refused) {
+            for (int i = 0; i < refused.length; i++) {
+                RawRequest r = refused[i];
                 credentials(f, requireToken).forEach(r::header);
                 RawResponse response = send(f.port, r);
-                assertEquals(403, response.status, response.toString());
+                if (i == 1) {
+                    assertHostRefused(response, "initialize without Host");
+                } else {
+                    assertEquals(403, response.status, response.toString());
+                }
                 assertNull(response.header("Mcp-Session-Id"), "a refused request must not open a session");
                 assertFalse(response.body.contains("protocolVersion"), response.body);
             }
@@ -460,11 +495,16 @@ class HostOriginSpecTest {
                 post(f.hostHeader(), CALL_RECORDER).header("Origin: https://127.0.0.1:" + f.port),
                 post(f.hostHeader() + ",evil.example", CALL_RECORDER),
             };
-            for (RawRequest r : refused) {
+            for (int i = 0; i < refused.length; i++) {
+                RawRequest r = refused[i];
                 r.header("Mcp-Session-Id: " + session);
                 credentials(f, requireToken).forEach(r::header);
                 RawResponse response = send(f.port, r);
-                assertEquals(403, response.status, response.toString());
+                if (i == 1 || i == 4) {
+                    assertHostRefused(response, "tools/call with a missing or joined Host");
+                } else {
+                    assertEquals(403, response.status, response.toString());
+                }
             }
             assertEquals(0, f.tool.executions.get(), "a refused tools/call must not run the command");
 
@@ -532,7 +572,7 @@ class HostOriginSpecTest {
                     "bad Host without token must be 403, not 401");
             assertEquals(403, send(f.port, post("evil.example:" + f.port, PING).header(bearer("wrong"))).status,
                     "bad Host with a wrong token must be 403, not 401");
-            assertEquals(403, send(f.port, post(null, PING)).status, "missing Host without token must be 403");
+            assertHostRefused(send(f.port, post(null, PING)), "missing Host without token must be refused, not 401");
             assertEquals(403, send(f.port, post(f.hostHeader(), PING).header("Origin: http://evil.example")).status,
                     "bad Origin without token must be 403, not 401");
             assertEquals(403, send(f.port, new RawRequest("POST", "/mcp")
