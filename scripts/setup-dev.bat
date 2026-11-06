@@ -17,8 +17,8 @@ set SOURCEFORGE_URL=https://unlimited.dl.sourceforge.net/project/sweethome3d/Swe
 
 :: 1. Already present
 if exist "%DEST%" (
-    echo [OK] %DEST% already exists -- nothing to do.
-    exit /b 0
+    echo [OK] %DEST% already exists.
+    goto jmf
 )
 
 if not exist lib mkdir lib
@@ -32,7 +32,7 @@ for %%P in (
         echo Found Sweet Home 3D at: %%P
         copy %%P "%DEST%" >nul
         echo [OK] Copied to %DEST%
-        exit /b 0
+        goto jmf
     )
 )
 
@@ -47,4 +47,17 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [OK] Downloaded to %DEST%
+
+:jmf
+:: lib\jmf.jar (the movie writer used by export_video) is nested in the SourceForge jar
+if not exist lib\jmf.jar tar -xf "%DEST%" -C lib jmf.jar 2>nul
+:: ...or sits next to SweetHome3D.jar in an installed Sweet Home 3D
+for %%D in ("%ProgramFiles%\Sweet Home 3D" "%ProgramFiles(x86)%\Sweet Home 3D") do (
+    if not exist lib\jmf.jar if exist "%%~D\jmf.jar" copy "%%~D\jmf.jar" lib\jmf.jar >nul
+)
+if not exist lib\jmf.jar (
+    echo [ERROR] jmf.jar not found: copy it from your Sweet Home 3D installation to lib\jmf.jar
+    exit /b 1
+)
+echo [OK] lib\jmf.jar ready
 endlocal

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `export_video` renders a camera path to a QuickTime Motion JPEG `.mov` and/or a `frame_%05d.jpg` sequence with Sweet Home 3D's offscreen 3D renderer, as **3D view → Create video** does in its two fast quality levels, so the Sweet Home 3D window need not be visible. The path is `keyframes` (camera position with `yaw`/`pitch`/`fov`, or `lookAt` points the camera keeps facing between keyframes) or the video path stored in the home. `speed` or `durationSec` sets the pace; `smooth` (default) curves through the keyframes and eases in and out; turns take the short way. Renders run in the background: the call answers after `waitSec` (default 45 s) with progress, and `export_video_status` waits for, reports or cancels the job. One export runs at a time; paths over 9000 frames are refused.
+
+### Changed
+
+- Building needs `lib/jmf.jar` (Java Media Framework, which Sweet Home 3D ships and the plugin uses at runtime). `scripts/setup-dev.sh` and `setup-dev.bat` extract it from the SourceForge `SweetHome3D.jar` or copy it from an installed Sweet Home 3D; `setup-dev.sh` also finds Sweet Home 3D 7.x on macOS (`Contents/app`).
+
 ## [1.2.0] - 2026-10-21
 
 ### Security

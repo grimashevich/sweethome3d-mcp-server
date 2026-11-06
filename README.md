@@ -195,7 +195,7 @@ Then quit Claude Desktop completely and start it again.
 
 ## Available Commands
 
-46 commands across 14 categories.
+48 commands across 14 categories.
 
 ### Scene
 
@@ -291,6 +291,8 @@ Then quit Claude Desktop completely and start it again.
 | `export_plan_image` | 2D floor plan as PNG |
 | `export_svg` | 2D floor plan as SVG |
 | `export_to_obj` | 3D scene as Wavefront OBJ (ZIP: OBJ + MTL + textures) |
+| `export_video` | Camera fly-through as QuickTime .mov and/or JPEG frames (fast offscreen 3D, like SH3D's Create video); keyframes with `lookAt` or yaw/pitch, smooth or linear; renders in the background |
+| `export_video_status` | Progress or result of a long `export_video`; can cancel it |
 
 ### Save / Load
 
@@ -332,7 +334,7 @@ See the [1.2.0 upgrade notes](CHANGELOG.md#upgrade-notes).
 git clone https://github.com/grimashevich/sweethome3d-mcp-server.git
 cd sweethome3d-mcp-server
 
-# 2. Obtain SweetHome3D.jar (copies from your SH3D installation or downloads it)
+# 2. Obtain SweetHome3D.jar and jmf.jar (copies from your SH3D installation or downloads it)
 ./scripts/setup-dev.sh        # macOS / Linux / Git Bash on Windows
 # scripts\setup-dev.bat       # Windows Command Prompt
 
@@ -349,6 +351,8 @@ cd sweethome3d-mcp-server
 > **Why the setup script?** `SweetHome3D.jar` is a 46 MB binary excluded from git.
 > The script first checks your local Sweet Home 3D installation (fastest, works offline),
 > then falls back to downloading from SourceForge.
+> It also puts `lib/jmf.jar` (Java Media Framework, used by `export_video` to write `.mov` files) next to it;
+> the plugin uses Sweet Home 3D's own copy at runtime, so it is not bundled.
 > The three Java3D JARs (`j3dcore`, `j3dutils`, `vecmath`) are included in `lib/` directly.
 
 ## Architecture
@@ -357,7 +361,7 @@ The plugin is a single self-contained component with no external runtime depende
 
 - **`plugin`** — Entry point (`SH3DMcpPlugin`), settings dialog
 - **`http`** — Streamable HTTP MCP server (JSON-RPC 2.0, port 9877), `RequestGuard` filter
-- **`command`** — registry and interfaces; 46 handlers in `command.handler`, generators in `command.shape`, shared helpers in `command.util`
+- **`command`** — registry and interfaces; 48 handlers in `command.handler`, generators in `command.shape`, shared helpers in `command.util`
 - **`bridge`** — Thread-safe Sweet Home 3D API wrapper (`HomeAccessor` via EDT, `CheckpointManager`, `ObjectResolver`)
 - **`protocol`** — Hand-written JSON parser (zero external dependencies)
 - **`config`** — Plugin settings, `AuthTokenStore`, Claude Desktop auto-configurator

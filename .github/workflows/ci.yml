@@ -46,6 +46,9 @@ jobs:
           curl -L --retry 3 -o lib/SweetHome3D.jar \
             "https://unlimited.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5.jar"
 
+      - name: Extract jmf.jar
+        run: unzip -o -j lib/SweetHome3D.jar jmf.jar -d lib
+
       - name: Install Xvfb
         run: sudo apt-get install -y xvfb
 
@@ -119,6 +122,9 @@ jobs:
           curl -fL --retry 5 --retry-all-errors -C - -o lib/SweetHome3D.jar \
             "https://unlimited.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5.jar"
 
+      - name: Extract jmf.jar
+        run: unzip -o -j lib/SweetHome3D.jar jmf.jar -d lib
+
       - name: Install Xvfb
         run: sudo apt-get install -y xvfb
 
@@ -176,6 +182,9 @@ jobs:
         run: |
           curl -L --retry 3 -o lib/SweetHome3D.jar \
             "https://unlimited.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5.jar"
+
+      - name: Extract jmf.jar
+        run: unzip -o -j lib/SweetHome3D.jar jmf.jar -d lib
 
       - name: Build plugin
         run: mvn package -DskipTests --no-transfer-progress

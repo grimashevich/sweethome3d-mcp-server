@@ -42,7 +42,7 @@ The `SweetHome3D.jar` dependency is not included in the repository (46 MB). Run 
 scripts\setup-dev.bat
 ```
 
-The script first looks for an existing Sweet Home 3D installation on your machine. If not found, it downloads the JAR from SourceForge automatically.
+The script first looks for an existing Sweet Home 3D installation on your machine. If not found, it downloads the JAR from SourceForge automatically. It also puts `lib/jmf.jar` (Java Media Framework, which writes `export_video` movies) next to it, extracted from the SourceForge JAR or copied from the installation. It is excluded from git too: Sweet Home 3D ships it, and the plugin uses that copy at runtime.
 
 ### 3. Build
 

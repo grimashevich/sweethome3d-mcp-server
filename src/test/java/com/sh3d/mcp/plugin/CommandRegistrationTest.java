@@ -8,6 +8,8 @@ import com.sh3d.mcp.bridge.HomeAccessor;
 import com.sh3d.mcp.command.handler.AddDimensionLineHandler;
 import com.sh3d.mcp.command.handler.DeleteDimensionLineHandler;
 import com.sh3d.mcp.command.handler.DeleteLabelHandler;
+import com.sh3d.mcp.command.handler.ExportVideoHandler;
+import com.sh3d.mcp.command.handler.ExportVideoStatusHandler;
 import com.sh3d.mcp.command.handler.ModifyDimensionLineHandler;
 import com.sh3d.mcp.command.handler.ModifyLabelHandler;
 import com.sh3d.mcp.protocol.Request;
@@ -55,6 +57,8 @@ class CommandRegistrationTest {
             "export_plan_image",
             "export_svg",
             "export_to_obj",
+            "export_video",
+            "export_video_status",
             "generate_shape",
             "get_cameras",
             "get_state",
@@ -133,9 +137,9 @@ class CommandRegistrationTest {
 
     @Test
     void testExactlyTheDocumentedCommandsAreRegistered() {
-        // README and ARCHITECTURE say 46; a command added or dropped must change them together
+        // README and ARCHITECTURE say 48; a command added or dropped must change them together
         assertEquals(new TreeSet<>(EXPECTED_COMMANDS), new TreeSet<>(registry.getHandlers().keySet()));
-        assertEquals(46, registry.getHandlers().size());
+        assertEquals(48, registry.getHandlers().size());
     }
 
     @Test
@@ -228,6 +232,41 @@ class CommandRegistrationTest {
         assertEquals(0, home.getLabels().size());
 
         assertTrue(dispatch(accessor, "delete_label", "id", id).isError());
+    }
+
+    @Test
+    void testVideoCommandsAreBoundToTheirHandlers() {
+        Map<String, CommandHandler> handlers = registry.getHandlers();
+        assertInstanceOf(ExportVideoHandler.class, handlers.get("export_video"));
+        assertInstanceOf(ExportVideoStatusHandler.class, handlers.get("export_video_status"));
+    }
+
+    /**
+     * The server switches to another Home's registry when a window opens or closes; a video job must stay
+     * reachable and the one-export-at-a-time rule must hold across them, so every registry shares one handler.
+     */
+    @Test
+    void testEveryHomeRegistrySharesOneVideoExportHandler() throws Exception {
+        Method method = SH3DMcpPlugin.class.getDeclaredMethod(
+                "createCommandRegistry", com.eteks.sweethome3d.viewcontroller.ExportableView.class);
+        method.setAccessible(true);
+        CommandRegistry otherHome = (CommandRegistry) method.invoke(new SH3DMcpPlugin(), (Object) null);
+
+        assertSame(registry.getHandlers().get("export_video"), otherHome.getHandlers().get("export_video"));
+    }
+
+    @Test
+    void testVideoCommandsThroughTheRegistry() {
+        HomeAccessor accessor = new HomeAccessor(new Home(), null);
+
+        Response noOutput = dispatch(accessor, "export_video", "keyframes", Arrays.asList(
+                params("x", 0.0), params("x", 100.0)));
+        Response unknownJob = dispatch(accessor, "export_video_status", "jobId", "nope", "waitSec", 0.0);
+
+        assertTrue(noOutput.isError());
+        assertTrue(noOutput.getMessage().contains("filePath"), noOutput.getMessage());
+        assertTrue(unknownJob.isError());
+        assertTrue(unknownJob.getMessage().contains("Unknown video export 'nope'"), unknownJob.getMessage());
     }
 
     private static Response dispatch(HomeAccessor accessor, String action, Object... keyValues) {

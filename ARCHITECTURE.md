@@ -62,7 +62,7 @@ Java 8 или новее, включая встроенную Java 8. Сборк
 |  |                                                                      | |
 |  |  CommandRegistry -----> CommandHandler (interface)                    | |
 |  |                         CommandDescriptor (auto-discovery)            | |
-|  |                         46 handler-классов                            | |
+|  |                         48 handler-классов                            | |
 |  +-------------------------------------|--------------------------------+ |
 |                                        |                                  |
 |                                        v                                  |
@@ -131,7 +131,7 @@ com.sh3d.mcp/
 │   ├── CommandHandler.java         # Интерфейс обработчика
 │   ├── CommandDescriptor.java      # Описание и JSON Schema для tools/list
 │   ├── CommandRegistry.java        # Реестр action → handler
-│   ├── handler/                    # 46 обработчиков команд
+│   ├── handler/                    # 48 обработчиков команд
 │   │   ├── GetStateHandler.java
 │   │   ├── GenerateShapeHandler.java
 │   │   ├── ModifyLabelHandler.java
@@ -152,6 +152,8 @@ com.sh3d.mcp/
 │   │       └── CsgTimeoutException.java
 │   └── util/                       # Общая валидация, форматирование и геометрия
 │       ├── ValidationUtil.java
+│       ├── CameraPath.java         # Кадры видео по ключевым точкам: скорость, сглаживание, lookAt
+│       ├── VideoWriter.java        # Кадры Java 3D offscreen → .mov (JMF) и/или JPEG
 │       ├── FormatUtil.java
 │       ├── SchemaBuilder.java
 │       ├── SchemaUtil.java
@@ -184,7 +186,7 @@ com.sh3d.mcp/
 
 **`SH3DMcpPlugin extends com.eteks.sweethome3d.plugin.Plugin`**
 - Главный класс плагина, указывается в `ApplicationPlugin.properties`
-- `getActions()` -- создаёт `HomeAccessor`, `CommandRegistry` (46 команд), `HttpMcpServer`
+- `getActions()` -- создаёт `HomeAccessor`, `CommandRegistry` (48 команд), `HttpMcpServer`
 - При `autoStart=true` запускает HTTP-сервер сразу
 - `destroy()` -- переключает сервер на оставшийся Home; при закрытии последнего Home останавливает сервер
 
@@ -325,10 +327,17 @@ void onStateChanged(ServerState oldState, ServerState newState);
 |-------|-----|----------------|
 | **EDT** (Swing) | Основной UI-поток SH3D | Все мутации модели Home, чтение состояния |
 | **pool-thread-N** | daemon (ThreadPoolExecutor) | Обработка HTTP-запросов, JSON-RPC диспетчеризация |
+| **sh3d-mcp-video** | daemon, один на JVM | Рендер `export_video`: кадры Java 3D offscreen и запись `.mov`/JPEG |
 
 `HttpServer` использует `ThreadPoolExecutor` с `SynchronousQueue` и `DaemonThreadFactory`.
 Параметры пула: core=4, max=16 потоков, keepAlive=60 секунд. `SynchronousQueue` обеспечивает
 прямую передачу задач потокам без буферизации, что предотвращает накопление задач в очереди.
+
+`export_video` не держит HTTP-поток до конца рендера: модель читается и клонируется в EDT, кадры
+рендерятся в потоке `sh3d-mcp-video` на этом клоне (как `VideoPanel` в SH3D: клон не связан с UI,
+поэтому его камера меняется вне EDT), а ответ приходит через `waitSec` секунд или раньше; дальше
+клиент следит за задачей через `export_video_status`. Обработчик один на все окна Home
+(`SH3DMcpPlugin.EXPORT_VIDEO`), поэтому одновременно идёт не больше одного экспорта.
 
 ### 3.2 Жизненный цикл сервера
 
@@ -446,7 +455,7 @@ Java-десериализация записи `Home` не выполняетс�
 с обработчиком. `CommandDescriptor` предоставляет описание и JSON Schema для MCP `tools/list`.
 
 ```
-CommandRegistry (46 команд)
+CommandRegistry (48 команд)
   |
   |-- "get_state"               --> GetStateHandler
   |-- "create_walls"            --> CreateWallsHandler
@@ -569,7 +578,7 @@ registry.register("my_command", new MyCommandHandler());
 ### 5.1 Plugin API
 
 `SH3DMcpPlugin.getActions()` загружает настройки и создаёт для каждого Home собственные
-`HomeAccessor` и реестр 46 команд. Первый экземпляр создаёт общий `HttpMcpServer`
+`HomeAccessor` и реестр 48 команд. Первый экземпляр создаёт общий `HttpMcpServer`
 и запускает его при `autoStart=true`; открытие следующего Home переключает контекст
 общего сервера через `switchContext(registry, accessor)`. `destroy()` переключает
 контекст на последний оставшийся Home либо останавливает сервер, если закрыт последний Home.
@@ -767,6 +776,7 @@ sh3d-mcp-plugin/
 |   |-- j3dcore.jar              # Java 3D (system scope)
 |   |-- j3dutils.jar
 |   |-- vecmath.jar
+|   |-- jmf.jar                  # JMF, запись .mov (system scope; не в git, см. scripts/setup-dev.sh)
 |
 |-- src/
 |   |-- main/
@@ -776,7 +786,7 @@ sh3d-mcp-plugin/
 |   |   |   |-- server/          # ServerState, ServerStateListener
 |   |   |   |-- protocol/        # JsonUtil, Request, Response
 |   |   |   |-- command/         # Интерфейсы и реестр
-|   |   |   |   |-- handler/     # 46 обработчиков
+|   |   |   |   |-- handler/     # 48 обработчиков
 |   |   |   |   |-- shape/       # Генераторы геометрии
 |   |   |   |   |   |-- csg/     # Булевы операции
 |   |   |   |   |-- util/        # Общие утилиты
@@ -815,7 +825,9 @@ sh3d-mcp-plugin/
 ```
 
 **Примечание:** SH3D не публикуется в Maven Central. JAR берётся из установки SH3D
-и лежит в `lib/SweetHome3D.jar` с `<scope>system</scope>`.
+и лежит в `lib/SweetHome3D.jar` с `<scope>system</scope>`. `lib/jmf.jar` (Java Media Framework, через
+него `export_video` пишет `.mov`) тоже не в git: `scripts/setup-dev.sh` извлекает его из `SweetHome3D.jar`
+с SourceForge или копирует из установки SH3D; в плагин он не входит, при запуске его даёт SH3D.
 
 ### 8.3 Сборка и деплой
 
@@ -953,7 +965,7 @@ Claude                    McpRequestHandler    JsonRpcProtocol
 
 **Статус:** Принято (действует)
 
-Паттерн Command + Registry хорошо масштабируется. С 5 команд в MVP вырос до 46 команд,
+Паттерн Command + Registry хорошо масштабируется. С 5 команд в MVP вырос до 48 команд,
 добавление новой команды по-прежнему = 1 класс + 1 строка регистрации. Расширен интерфейсом
 `CommandDescriptor` для auto-discovery (MCP `tools/list`).
 
