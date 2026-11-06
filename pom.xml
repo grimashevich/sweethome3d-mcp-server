@@ -59,6 +59,14 @@
             <scope>system</scope>
             <systemPath>${project.basedir}/lib/vecmath.jar</systemPath>
         </dependency>
+        <!-- JMF (in SH3D's classpath at runtime; scripts/setup-dev.sh extracts it from lib/SweetHome3D.jar) -->
+        <dependency>
+            <groupId>javax.media</groupId>
+            <artifactId>jmf</artifactId>
+            <version>2.1.1e</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/jmf.jar</systemPath>
+        </dependency>
 
         <!-- Tests -->
         <dependency>
